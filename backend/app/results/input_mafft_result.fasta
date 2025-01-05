@@ -1,0 +1,10 @@
+>nucleotideA
+aaaaaaaaattttatatatatatatatttttatgcatgcatgcatgagagatatttgggc
+caaaaaaaaattttatatatatatatatttttatgcatgcatgcatgagagatatttggg
+ccaaaaaaaaattttatatatatatatatttttatgcatgcatgcatgagagatatttgg
+gcc
+>nucleotideB
+------------------------------------------------------------
+--------------------------atttttatgcatgcatgcatgagagatatttggg
+ccaaaaaaaaattttatatatatatatatttttatgcatgcat-----------------
+---
