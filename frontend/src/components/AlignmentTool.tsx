@@ -16,7 +16,7 @@ import {
 import { FaUpload, FaPlay, FaCalculator } from 'react-icons/fa'
 import { ResultViewer } from './ResultViewer'
 
-const API_URL = 'http://localhost:8000'
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 export const AlignmentTool = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
