@@ -1,4 +1,4 @@
-FROM python:3.9
+FROM python:3.10-slim
 
 WORKDIR /app
 
@@ -25,7 +25,7 @@ COPY ./app/lib/uclust /usr/local/bin/
 RUN chmod +x /usr/local/bin/uclust
 
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY ./app /app
 

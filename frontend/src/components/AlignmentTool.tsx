@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   Box,
   Button,
@@ -41,48 +41,60 @@ export const AlignmentTool = () => {
     mafft: false,
     uclust: false,
   })
+  const [isResultModalOpen, setIsResultModalOpen] = useState(false)
+
+  const checkStatus = useCallback(async () => {
+    if (!taskId || !isPolling) return
+
+    try {
+      const response = await fetch(`${API_URL}/status/${taskId}`)
+      const data = await response.json()
+      
+      setStatus(data.status)
+      
+      if (data.status === 'SUCCESS') {
+        setResultFile(data.result?.result_file || null)
+        setIsPolling(false)
+        const method = data.result?.result_file.includes('mafft') ? 'mafft' : 'uclust'
+        setCompletedMethods(prev => ({
+          ...prev,
+          [method]: true
+        }))
+        toast({
+          title: '분석이 완료되었습니다.',
+          status: 'success',
+          duration: 5000,
+        })
+
+        // 분석 완료 시 부모 컴포넌트에 알림
+        window.dispatchEvent(new Event('analysisUpdated'))
+      } else if (data.status === 'FAILURE' || data.error) {
+        setIsPolling(false)
+        toast({
+          title: '분석 중 오류가 발생했습니다.',
+          description: data.error,
+          status: 'error',
+          duration: 5000,
+        })
+      }
+    } catch (error) {
+      console.error('Status check failed:', error)
+      setIsPolling(false)
+      toast({
+        title: '상태 확인 중 오류가 발생했습니다.',
+        description: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.',
+        status: 'error',
+        duration: 5000,
+      })
+    }
+  }, [taskId, toast, isPolling])
 
   useEffect(() => {
     if (!taskId || !isPolling) return
 
-    const checkStatus = async () => {
-      try {
-        const response = await fetch(`${API_URL}/status/${taskId}`)
-        const data = await response.json()
-        
-        setStatus(data.status)
-        
-        if (data.status === 'SUCCESS') {
-          setResultFile(data.result?.result_file)
-          setIsPolling(false)
-          const method = data.result?.result_file.includes('mafft') ? 'mafft' : 'uclust'
-          setCompletedMethods(prev => ({
-            ...prev,
-            [method]: true
-          }))
-          toast({
-            title: '분석이 완료되었습니다.',
-            status: 'success',
-            duration: 5000,
-          })
-        } else if (data.status === 'FAILURE') {
-          setIsPolling(false)
-          toast({
-            title: '분석 중 오류가 발생했습니다.',
-            description: data.error,
-            status: 'error',
-            duration: 5000,
-          })
-        }
-      } catch (error) {
-        console.error('Status check failed:', error)
-        setIsPolling(false)
-      }
-    }
-
     const interval = setInterval(checkStatus, 3000)
     return () => clearInterval(interval)
-  }, [taskId, toast, isPolling])
+  }, [taskId, isPolling, checkStatus])
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -119,13 +131,20 @@ export const AlignmentTool = () => {
     formData.append('method', method)
 
     try {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30초 타임아웃
+
       const response = await fetch(`${API_URL}/alignment`, {
         method: 'POST',
         body: formData,
+        signal: controller.signal
       })
       
+      clearTimeout(timeoutId)
+      
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        const errorData = await response.json()
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`)
       }
       
       const data = await response.json()
@@ -153,7 +172,7 @@ export const AlignmentTool = () => {
     }
   }
 
-  const runBluebase = async () => {
+  const runBluebase = async (method: 'mafft' | 'uclust') => {
     if (!selectedFile) return;
 
     try {
@@ -164,7 +183,8 @@ export const AlignmentTool = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          filename: filename
+          filename: filename,
+          method: method
         }),
       });
 
@@ -173,13 +193,13 @@ export const AlignmentTool = () => {
       }
 
       toast({
-        title: 'Bluebase 계산이 완료되었습니다.',
+        title: `${method.toUpperCase()} Bluebase 계산이 완료되었습니다.`,
         status: 'success',
         duration: 3000,
       });
     } catch (error) {
       toast({
-        title: 'Bluebase 계산 중 오류가 발생했습니다.',
+        title: `${method.toUpperCase()} Bluebase 계산 중 오류가 발생했습니다.`,
         status: 'error',
         duration: 3000,
       });
@@ -220,157 +240,131 @@ export const AlignmentTool = () => {
         <Card w="full">
           <CardBody bg="brand.light" p={8}>
             <VStack spacing={6}>
-              {!showResult ? (
-                <>
-                  <Box w="full">
-                    <input
-                      type="file"
-                      accept=".fasta,.fa"
-                      onChange={handleFileChange}
-                      style={{ display: 'none' }}
-                      id="file-input"
-                    />
-                    <label htmlFor="file-input">
-                      <Button
-                        as="span"
-                        w="full"
-                        bg="brand.primary"
-                        color="brand.light"
-                        borderRadius="lg"
-                        variant="solid"
-                        leftIcon={<FaUpload />}
-                        size="lg"
-                        h="60px"
+              <Box w="full">
+                <input
+                  type="file"
+                  accept=".fasta,.fa"
+                  onChange={handleFileChange}
+                  style={{ display: 'none' }}
+                  id="file-input"
+                />
+                <label htmlFor="file-input">
+                  <Button
+                    as="span"
+                    w="full"
+                    bg="brand.primary"
+                    color="brand.light"
+                    borderRadius="lg"
+                    variant="solid"
+                    leftIcon={<FaUpload />}
+                    size="lg"
+                    h="60px"
+                    fontSize="lg"
+                    _hover={{
+                      bg: "brand.primaryLight",
+                    }}
+                  >
+                    FASTA 파일 선택
+                  </Button>
+                </label>
+              </Box>
+
+              {selectedFile && (
+                <Card 
+                  w="full" 
+                  variant="outline"
+                  bg="brand.light"
+                  p={1}
+                >
+                  <CardBody>
+                    <VStack spacing={6}>
+                      <Text 
+                        color="brand.primary"
                         fontSize="lg"
-                        _hover={{
-                          bg: "brand.primaryLight",
-                        }}
+                        fontWeight="500"
                       >
-                        FASTA 파일 선택
-                      </Button>
-                    </label>
-                  </Box>
-
-                  {selectedFile && (
-                    <Card 
-                      w="full" 
-                      variant="outline"
-                      bg="brand.light"
-                      p={1}
-                    >
-                      <CardBody>
-                        <VStack spacing={6}>
-                          <Text 
-                            color="brand.primary"
-                            fontSize="lg"
-                            fontWeight="500"
-                          >
-                            선택된 파일: <strong>{selectedFile.name}</strong>
-                          </Text>
-                          <HStack spacing={4} w="full">
-                            <Button
-                              bg="brand.primary"
-                              color="brand.light"
-                              variant="solid"
-                              _hover={{
-                                bg: "brand.primaryLight",
-                              }}
-                              onClick={() => runAlignment('mafft')}
-                              isDisabled={!!taskId && status !== 'SUCCESS' && status !== 'FAILURE'}
-                              leftIcon={<FaPlay />}
-                              flex={1}
-                              h="50px"
-                            >
-                              MAFFT 실행
-                            </Button>
-                            <Button
-                              bg="brand.primary"
-                              color="brand.light"
-                              variant="solid"
-                              onClick={() => runAlignment('uclust')}
-                              isDisabled={!!taskId && status !== 'SUCCESS' && status !== 'FAILURE'}
-                              leftIcon={<FaPlay />}
-                              flex={1}
-                              h="50px"
-                              _hover={{
-                                bg: "brand.primaryLight",
-                              }}
-                            >
-                              UCLUST 실행
-                            </Button>
-                          </HStack>
-                        </VStack>
-                      </CardBody>
-                    </Card>
-                  )}
-
-                  {taskId && status && status !== 'SUCCESS' && status !== 'FAILURE' && (
-                    <Card bg="brand.neutral" p={4} w="full">
-                      <HStack spacing={3} justify="center">
-                        <Spinner color="brand.primary" />
-                        <Text 
-                          color="brand.primary" 
-                          fontSize="lg"
-                          fontWeight="500"
-                        >
-                          분석 진행 중... ({status})
-                        </Text>
-                      </HStack>
-                    </Card>
-                  )}
-
-                  {resultFile && (
-                    <VStack spacing={4} w="full">
+                        선택된 파일: <strong>{selectedFile.name}</strong>
+                      </Text>
                       <HStack spacing={4} w="full">
-                        {completedMethods.mafft && (
-                          <Button
-                            bg="brand.neutral"
-                            color="brand.light"
-                            onClick={() => {
-                              setShowResult(true)
-                              setSelectedTab(0)
-                            }}
-                            flex={1}
-                            size="lg"
-                            h="50px"
-                            fontSize="lg"
-                            fontWeight="500"
-                            variant="solid"
-                            _hover={{
-                              bg: "brand.neutralLight",
-                            }}
-                          >
-                            MAFFT 결과 보기
-                          </Button>
-                        )}
-                        {completedMethods.uclust && (
-                          <Button
-                            bg="brand.neutral"
-                            color="brand.light"
-                            onClick={() => {
-                              setShowResult(true)
-                              setSelectedTab(1)
-                            }}
-                            flex={1}
-                            size="lg"
-                            h="50px"
-                            fontSize="lg"
-                            fontWeight="500"
-                            variant="solid"
-                            _hover={{
-                              bg: "brand.neutralLight",
-                            }}
-                          >
-                            UCLUST 결과 보기
-                          </Button>
-                        )}
-                      </HStack>
-                      
-                      {completedMethods.mafft && completedMethods.uclust && (
                         <Button
                           bg="brand.primary"
                           color="brand.light"
-                          onClick={runBluebase}
+                          variant="solid"
+                          _hover={{
+                            bg: "brand.primaryLight",
+                          }}
+                          onClick={() => runAlignment('mafft')}
+                          isDisabled={!!taskId && status !== 'SUCCESS' && status !== 'FAILURE'}
+                          leftIcon={<FaPlay />}
+                          flex={1}
+                          h="50px"
+                        >
+                          MAFFT 실행
+                        </Button>
+                        <Button
+                          bg="brand.primary"
+                          color="brand.light"
+                          variant="solid"
+                          onClick={() => runAlignment('uclust')}
+                          isDisabled={!!taskId && status !== 'SUCCESS' && status !== 'FAILURE'}
+                          leftIcon={<FaPlay />}
+                          flex={1}
+                          h="50px"
+                          _hover={{
+                            bg: "brand.primaryLight",
+                          }}
+                        >
+                          UCLUST 실행
+                        </Button>
+                      </HStack>
+                    </VStack>
+                  </CardBody>
+                </Card>
+              )}
+
+              {taskId && status && status !== 'SUCCESS' && status !== 'FAILURE' && (
+                <Card bg="brand.neutral" p={4} w="full">
+                  <HStack spacing={3} justify="center">
+                    <Spinner color="brand.primary" />
+                    <Text 
+                      color="brand.primary" 
+                      fontSize="lg"
+                      fontWeight="500"
+                    >
+                      분석 진행 중... ({status})
+                    </Text>
+                  </HStack>
+                </Card>
+              )}
+
+              {resultFile && (
+                <VStack spacing={4} w="full">
+                  <HStack spacing={4} w="full">
+                    {completedMethods.mafft && (
+                      <VStack spacing={4} w="full">
+                        <Button
+                          bg="brand.neutral"
+                          color="brand.light"
+                          onClick={() => {
+                            setSelectedTab(0)
+                            setIsResultModalOpen(true)
+                          }}
+                          w="full"
+                          size="lg"
+                          h="50px"
+                          fontSize="lg"
+                          fontWeight="500"
+                          variant="solid"
+                          _hover={{
+                            bg: "brand.neutralLight",
+                          }}
+                        >
+                          MAFFT 결과 보기
+                        </Button>
+                        <Button
+                          bg="brand.primary"
+                          color="brand.light"
+                          onClick={() => runBluebase('mafft')}
                           w="full"
                           size="lg"
                           h="50px"
@@ -382,22 +376,62 @@ export const AlignmentTool = () => {
                             bg: "brand.primaryLight",
                           }}
                         >
-                          Bluebase 계산
+                          MAFFT Bluebase 계산
                         </Button>
-                      )}
-                    </VStack>
-                  )}
-                </>
-              ) : (
-                resultFile && (
-                  <ResultViewer
-                    filePath={resultFile}
-                    apiUrl={API_URL}
-                    onClose={() => setShowResult(false)}
-                    defaultTab={selectedTab}
-                  />
-                )
+                      </VStack>
+                    )}
+                    
+                    {completedMethods.uclust && (
+                      <VStack spacing={4} w="full">
+                        <Button
+                          bg="brand.neutral"
+                          color="brand.light"
+                          onClick={() => {
+                            setSelectedTab(1)
+                            setIsResultModalOpen(true)
+                          }}
+                          w="full"
+                          size="lg"
+                          h="50px"
+                          fontSize="lg"
+                          fontWeight="500"
+                          variant="solid"
+                          _hover={{
+                            bg: "brand.neutralLight",
+                          }}
+                        >
+                          UCLUST 결과 보기
+                        </Button>
+                        <Button
+                          bg="brand.primary"
+                          color="brand.light"
+                          onClick={() => runBluebase('uclust')}
+                          w="full"
+                          size="lg"
+                          h="50px"
+                          fontSize="lg"
+                          fontWeight="500"
+                          leftIcon={<FaCalculator />}
+                          variant="solid"
+                          _hover={{
+                            bg: "brand.primaryLight",
+                          }}
+                        >
+                          UCLUST Bluebase 계산
+                        </Button>
+                      </VStack>
+                    )}
+                  </HStack>
+                </VStack>
               )}
+
+              <ResultViewer
+                filePath={resultFile || ''}
+                apiUrl={API_URL}
+                isOpen={isResultModalOpen}
+                onClose={() => setIsResultModalOpen(false)}
+                defaultTab={selectedTab}
+              />
             </VStack>
           </CardBody>
         </Card>

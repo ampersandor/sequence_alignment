@@ -10,9 +10,11 @@ services:
       - ./backend/app/results:/app/results
     depends_on:
       - redis
+      - postgres
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DATABASE_URL=postgresql://automsa:automsa123@postgres/automsa_db
     networks:
       - app-network
 
@@ -28,18 +30,16 @@ services:
     command: celery -A celery_worker worker --loglevel=info --concurrency=1
     volumes:
       - ./backend/app:/app
+    working_dir: /app
     depends_on:
       - redis
+      - postgres
       - backend
     environment:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - PYTHONPATH=/app
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+      - DATABASE_URL=postgresql://automsa:automsa123@postgres/automsa_db
     networks:
       - app-network
 
@@ -52,12 +52,28 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      - VITE_API_URL=${API_URL:-http://localhost:8000}
+      - VITE_API_URL=http://localhost:8000
     depends_on:
       - backend
+    networks:
+      - app-network
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: automsa
+      POSTGRES_PASSWORD: automsa123
+      POSTGRES_DB: automsa_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - app-network
 
 networks:
   app-network:
     driver: bridge 
+
+volumes:
+  postgres_data: 

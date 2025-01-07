@@ -5,54 +5,28 @@ import {
   Text,
   VStack,
 } from '@chakra-ui/react'
-import { AlignmentTool } from '@/components/AlignmentTool'
+import { AlignmentTool } from '../components/AlignmentTool'
+import { AnalysisHistory } from '../components/AnalysisHistory'
+
+const API_URL = import.meta.env.VITE_API_URL
 
 export const Home = () => {
   return (
-    <Box>
-      {/* Hero Section */}
-      <Box
-        bgGradient="brand.primary"
-        pt={20}
-        pb={32}
-        borderBottom="1px solid"
-        borderColor="whiteAlpha.100"
-      >
-        <Container maxW="container.xl">
-          <VStack spacing={8} textAlign="center">
-            <Heading
-              as="h1"
-              size="2xl"
-              color="brand.light"
-              fontWeight="bold"
-            >
-              MAFFT & UCLUST
+    <Box w="full" minH="100vh" bg="gray.50">
+      <Container maxW="container.xl" py={8}>
+        <VStack spacing={8} align="stretch">
+          <Box textAlign="center">
+            <Heading size="2xl" color="brand.primary" mb={4}>
+              시퀀스 정렬 도구
             </Heading>
-            <Text
-              fontSize="xl"
-              color="brand.secondary"
-              maxW="3xl"
-            >
-              for AutoMSA
+            <Text fontSize="lg" color="gray.600">
+              MAFFT와 UCLUST를 사용한 시퀀스 정렬 분석
             </Text>
-          </VStack>
-        </Container>
-      </Box>
-
-      {/* Features Section */}
-      <Container maxW="container.xl" mt={-20} mb={16}>
-        {/* Tool Section */}
-        <Box 
-          w="full" 
-          maxW="container.xl" 
-          mx="auto"
-          bg="brand.light"
-          p={8}
-          borderRadius="2xl"
-          boxShadow="xl"
-        >
+          </Box>
+          
           <AlignmentTool />
-        </Box>
+          <AnalysisHistory apiUrl={API_URL} />
+        </VStack>
       </Container>
     </Box>
   )
