@@ -186,6 +186,27 @@ export const AlignmentTool = () => {
     }
   };
 
+  const fetchResult = async (filename: string) => {
+    try {
+      const response = await fetch(`${API_URL}/results/${filename}`);
+      if (!response.ok) throw new Error('Failed to fetch result');
+      
+      // 텍스트로 읽기
+      const text = await response.text();
+      
+      // 줄바꿈 처리 보존
+      const formattedText = text
+        .split('\n')
+        .map(line => line.trim())
+        .join('\n');
+      
+      // 결과 표시
+      setResult(formattedText);
+    } catch (error) {
+      console.error('Error fetching result:', error);
+    }
+  };
+
   return (
     <Box w="full">
       <VStack spacing={8}>

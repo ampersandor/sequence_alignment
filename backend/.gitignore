@@ -5,3 +5,6 @@ results/*
 .venv
 .env
 __pycache__/
+results/
+uploads/
+*.fa

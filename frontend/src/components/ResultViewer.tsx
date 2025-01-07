@@ -37,23 +37,55 @@ export const ResultViewer = ({ filePath, apiUrl, onClose, defaultTab }: ResultVi
       try {
         const filename = filePath.split('/').pop()
         const baseName = filename?.split('_')[0]
+        
+        console.log('Fetching results for:', {
+          filePath,
+          filename,
+          baseName
+        })
 
         // MAFFT 결과 가져오기
         const mafftResponse = await fetch(`${apiUrl}/results/${baseName}_mafft_result.fasta`)
+        console.log('MAFFT Response:', {
+          status: mafftResponse.status,
+          statusText: mafftResponse.statusText,
+          headers: Object.fromEntries(mafftResponse.headers.entries())
+        })
+        
         if (mafftResponse.ok) {
           const mafftText = await mafftResponse.text()
-          setMafftContent(mafftText)
+          console.log('MAFFT Raw Content:', mafftText)
+          
+          const formattedMafftText = mafftText
+            .split('\n')
+            .map(line => line.trimEnd())
+            .join('\n')
+          console.log('MAFFT Formatted Content:', formattedMafftText)
+          setMafftContent(formattedMafftText)
         }
 
         // UCLUST 결과 가져오기
         const uclustResponse = await fetch(`${apiUrl}/results/${baseName}_uclust_result.fasta`)
+        console.log('UCLUST Response:', {
+          status: uclustResponse.status,
+          statusText: uclustResponse.statusText,
+          headers: Object.fromEntries(uclustResponse.headers.entries())
+        })
+        
         if (uclustResponse.ok) {
           const uclustText = await uclustResponse.text()
-          setUclustContent(uclustText)
+          console.log('UCLUST Raw Content:', uclustText)
+          
+          const formattedUclustText = uclustText
+            .split('\n')
+            .map(line => line.trimEnd())
+            .join('\n')
+          console.log('UCLUST Formatted Content:', formattedUclustText)
+          setUclustContent(formattedUclustText)
         }
 
       } catch (error) {
-        console.error('Error fetching result:', error)
+        console.error('Error in fetchContent:', error)
         toast({
           title: '결과 파일을 불러오는데 실패했습니다.',
           status: 'error',
@@ -66,6 +98,12 @@ export const ResultViewer = ({ filePath, apiUrl, onClose, defaultTab }: ResultVi
 
     fetchContent()
   }, [filePath, apiUrl, toast])
+
+  // pre 태그 렌더링 전에 내용 로깅
+  useEffect(() => {
+    console.log('Current MAFFT content:', mafftContent)
+    console.log('Current UCLUST content:', uclustContent)
+  }, [mafftContent, uclustContent])
 
   const downloadFile = (type: 'mafft' | 'uclust') => {
     const filename = filePath.split('/').pop()
@@ -153,7 +191,9 @@ export const ResultViewer = ({ filePath, apiUrl, onClose, defaultTab }: ResultVi
                     padding: '1rem',
                     margin: 0,
                     fontFamily: 'monospace',
-                    color: '#000000'
+                    color: '#000000',
+                    lineHeight: '1.5',
+                    fontSize: '14px'
                   }}>
                     {mafftContent}
                   </pre>
@@ -189,7 +229,9 @@ export const ResultViewer = ({ filePath, apiUrl, onClose, defaultTab }: ResultVi
                     padding: '1rem',
                     margin: 0,
                     fontFamily: 'monospace',
-                    color: '#000000'
+                    color: '#000000',
+                    lineHeight: '1.5',
+                    fontSize: '14px'
                   }}>
                     {uclustContent}
                   </pre>
