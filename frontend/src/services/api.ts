@@ -68,16 +68,9 @@ export const api = {
   },
 
   // Bluebase 계산
-  calculateBluebase: async (filename: string, method: 'mafft' | 'uclust') => {
-    const response = await fetch(`${API_URL}/bluebase`, {
+  calculateBluebase: async (input_file: string) => {
+    const response = await fetch(`${API_URL}/analysis/bluebase/${input_file}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        filename,
-        method,
-      }),
     });
 
     if (!response.ok) {

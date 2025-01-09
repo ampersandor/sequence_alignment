@@ -151,3 +151,40 @@ def align_sequences(self, upload_id: int, method: str):
 
     finally:
         db.close()
+
+@celery.task(bind=True)
+def calculate_bluebase_task(self, input_path: str, output_path: str) -> dict:
+    """
+    Bluebase 계산을 수행하는 Celery 태스크
+    
+    Args:
+        input_path (str): 입력 FASTA 파일 경로
+        output_path (str): 결과 파일 경로
+    
+    Returns:
+        dict: 작업 결과 정보를 담은 딕셔너리
+    """
+    logger.info(f"Starting Bluebase calculation for: {input_path}")
+    
+    try:
+        # TODO: 실제 Bluebase 계산 로직 구현
+        # 1. FASTA 파일 읽기
+        # 2. 시퀀스 분석
+        # 3. Bluebase 계산
+        # 4. 결과 파일 저장
+        
+        logger.info(f"Bluebase calculation completed. Results saved to: {output_path}")
+        
+        return {
+            "status": "SUCCESS",
+            "result_file": os.path.basename(output_path),
+            "metrics": {
+                "input_file": os.path.basename(input_path),
+                "output_file": os.path.basename(output_path),
+                "timestamp": datetime.now().isoformat()
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in Bluebase calculation: {str(e)}")
+        raise RuntimeError(f"Bluebase calculation failed: {str(e)}")

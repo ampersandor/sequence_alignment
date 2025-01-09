@@ -1,13 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models import Upload, Analysis
-from app.workers.analysis import align_sequences
+from app.workers.analysis import align_sequences, calculate_bluebase_task
 from app.schemas import AlignmentRequest, TaskStatus
 from fastapi.responses import FileResponse
 import os
 from app.core.config import settings
 import logging
+from datetime import datetime
+import uuid
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -85,3 +87,38 @@ async def get_result_file(file_name: str):
         media_type="application/octet-stream",
         filename=file_name
     ) 
+
+@router.post("/bluebase/{input_file}")
+async def calculate_bluebase(
+    input_file: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Bluebase 계산 수행
+    """
+    try:
+        # 입력 파일 경로 구성
+        input_path = os.path.join(settings.RESULT_DIR, input_file)
+        if not os.path.exists(input_path):
+            raise HTTPException(
+                status_code=404,
+                detail=f"Input file not found: {input_file}"
+            )
+
+        # 결과 파일명 생성
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        unique_id = str(uuid.uuid4())[:8]
+        output_file = f"{os.path.splitext(input_file)[0]}_bluebase_{timestamp}_{unique_id}.txt"
+        output_path = os.path.join(settings.RESULT_DIR, output_file)
+
+        # Bluebase 계산 작업 시작
+        task = calculate_bluebase_task.delay(input_path, output_path)
+
+        return {
+            "task_id": task.id,
+            "output_file": output_file
+        }
+
+    except Exception as e:
+        logger.error(f"Error in bluebase calculation: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e)) 
