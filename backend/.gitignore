@@ -1,7 +1,8 @@
-uploads/*
-results/*
-!uploads/.gitkeep
-!results/.gitkeep
+# 데이터 파일 무시
+data/uploads/*
+data/results/*
+!data/uploads/.gitkeep
+!data/results/.gitkeep
 .venv
 .env
 __pycache__/

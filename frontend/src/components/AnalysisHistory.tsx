@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import {
   Box,
   Table,
@@ -13,36 +13,108 @@ import {
   Heading,
   Badge,
   IconButton,
-  Tooltip,
-  Text,
+  Button,
   useToast,
   HStack,
+  Spinner,
 } from '@chakra-ui/react'
-import { FaDownload, FaInfoCircle, FaSync } from 'react-icons/fa'
-import { Analysis } from '../types/analysis'
-import { usePolling } from '@/hooks/usePolling'
+import { FaDownload, FaSync, FaCalculator, FaEye, FaPlay } from 'react-icons/fa'
+import { Upload } from '../types/upload'
+import { usePolling } from '../hooks/usePolling'
+import { ResultViewer } from './ResultViewer'
+import { api } from '../services/api'
+import { AlignmentMethod } from '../types/common'
 
-interface AnalysisHistoryProps {
-  apiUrl: string;
-}
-
-export const AnalysisHistory = ({ apiUrl }: AnalysisHistoryProps) => {
-  const [analyses, setAnalyses] = useState<Analysis[]>([])
+export const AnalysisHistory = () => {
+  const [uploads, setUploads] = useState<Upload[]>([])
+  const [selectedAnalysis, setSelectedAnalysis] = useState<Upload['analyses'][0] | null>(null)
+  const [isResultModalOpen, setIsResultModalOpen] = useState(false)
+  const [selectedTab, setSelectedTab] = useState(0)
+  const [isPollingEnabled, setIsPollingEnabled] = useState(true)
   const toast = useToast()
 
-  const fetchAnalyses = async () => {
+  const fetchUploads = async () => {
     try {
-      const response = await fetch(`${apiUrl}/analyses`)
-      if (!response.ok) throw new Error('Failed to fetch analyses')
-      const data = await response.json()
-      setAnalyses(data)
+      const data = await api.getUploads();
+      console.log(data);
+      setUploads(data);
     } catch (error) {
-      console.error('Error fetching analyses:', error)
+      handleError(error);
     }
-  }
+  };
 
-  // 3초마다 분석 기록 업데이트
-  usePolling(fetchAnalyses, 3000)
+  const handleError = (error: any) => {
+    toast({
+      title: '오류가 발생했습니다.',
+      description: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.',
+      status: 'error',
+      duration: 5000,
+    });
+  };
+
+  const allAnalysesCompleted = useCallback(() => {
+    return uploads.every(upload => 
+      upload.analyses?.every(analysis => 
+        ['SUCCESS', 'FAILURE'].includes(analysis.status)
+      ) ?? true
+    );
+  }, [uploads]);
+
+  const hasOngoingAnalysis = useCallback(() => {
+    return uploads.some(upload => 
+      upload.analyses?.some(analysis => 
+        ['PENDING', 'STARTED'].includes(analysis.status)
+      ) ?? false
+    );
+  }, [uploads]);
+
+  useEffect(() => {
+    if (allAnalysesCompleted() && !hasOngoingAnalysis()) {
+      setIsPollingEnabled(false);
+    } else {
+      setIsPollingEnabled(true);
+    }
+  }, [uploads, allAnalysesCompleted, hasOngoingAnalysis]);
+
+  usePolling(fetchUploads, 10000, {
+    onError: handleError,
+    enabled: isPollingEnabled
+  });
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsPollingEnabled(entry.isIntersecting);
+      },
+      { threshold: 0 }
+    );
+
+    const element = document.getElementById('analysis-history');
+    if (element) {
+      observer.observe(element);
+    }
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    // 초기 데이터 로드
+    fetchUploads();
+
+    // 이벤트 리스너 등록
+    const handleAnalysisUpdate = () => {
+      fetchUploads();
+    };
+
+    window.addEventListener('analysisUpdated', handleAnalysisUpdate);
+
+    // 컴포넌트 언마운트 시 이벤트 리스너 제거
+    return () => {
+      window.removeEventListener('analysisUpdated', handleAnalysisUpdate);
+    };
+  }, []);
 
   const getStatusBadge = (status: string) => {
     const statusProps = {
@@ -59,26 +131,74 @@ export const AnalysisHistory = ({ apiUrl }: AnalysisHistoryProps) => {
     return new Date(dateString).toLocaleString('ko-KR')
   }
 
-  const formatTimestamp = (timestamp?: number) => {
-    if (!timestamp) return '-'
-    return new Date(timestamp * 1000).toLocaleTimeString('ko-KR')
-  }
+  const downloadOriginal = async (filename: string) => {
+    try {
+      await api.downloadResult(filename);
+    } catch (error) {
+      handleError(error);
+    }
+  };
 
-  const downloadResult = (filename: string) => {
-    window.open(`${apiUrl}/results/${filename}`, '_blank')
-  }
+  const runAnalysis = async (uploadId: number, method: AlignmentMethod) => {
+    try {
+      await api.startAnalysis(uploadId, method);
+      setIsPollingEnabled(true);
+      toast({
+        title: '분석이 시작되었습니다.',
+        status: 'info',
+        duration: 3000,
+      });
+    } catch (error) {
+      handleError(error);
+    }
+  };
+
+  const runBluebase = async (method: AlignmentMethod) => {
+    if (!selectedAnalysis) return;
+
+    try {
+      const filename = selectedAnalysis.result_file?.split('_')[0];
+      if (!filename) throw new Error('Invalid filename');
+      
+      await api.calculateBluebase(filename, method);
+      toast({
+        title: `${method.toUpperCase()} Bluebase 계산이 완료되었습니다.`,
+        status: 'success',
+        duration: 3000,
+      });
+    } catch (error) {
+      handleError(error);
+    }
+  };
+
+  const viewResult = (analysisId: number, method: AlignmentMethod) => {
+    const upload = uploads.find(u => 
+      u.analyses.some(a => a.id === analysisId && a.method === method && a.status === 'SUCCESS')
+    );
+    
+    if (upload) {
+      const foundAnalysis = upload.analyses.find(a => 
+        a.id === analysisId && a.method === method && a.status === 'SUCCESS'
+      );
+      if (foundAnalysis) {
+        setSelectedAnalysis(foundAnalysis);
+        setSelectedTab(method === 'mafft' ? 0 : 1);
+        setIsResultModalOpen(true);
+      }
+    }
+  };
 
   return (
-    <Card variant="outline" w="full" mt={8}>
+    <Card variant="outline" w="full" mt={8}id="analysis-history">
       <CardHeader bg="brand.primary" py={4}>
         <HStack justify="space-between">
-          <Heading size="md" color="brand.light">분석 기록</Heading>
+          <Heading size="md" color="brand.light">로드된 파일</Heading>
           <IconButton
-            aria-label="Refresh analyses"
+            aria-label="Refresh"
             icon={<FaSync />}
             size="sm"
             colorScheme="whiteAlpha"
-            onClick={() => fetchAnalyses()}
+            onClick={fetchUploads}
           />
         </HStack>
       </CardHeader>
@@ -88,65 +208,147 @@ export const AnalysisHistory = ({ apiUrl }: AnalysisHistoryProps) => {
             <Thead bg="gray.50">
               <Tr>
                 <Th>파일명</Th>
-                <Th>실행 시각</Th>
-                <Th>방법</Th>
-                <Th>상태</Th>
-                <Th>실행 시간</Th>
-                <Th>시퀀스 수</Th>
-                <Th>평균 길이</Th>
-                <Th>생성일</Th>
+                <Th>업로드 시각</Th>
+                <Th>MAFFT</Th>
+                <Th>UCLUST</Th>
                 <Th>액션</Th>
               </Tr>
             </Thead>
             <Tbody>
-              {analyses.map((analysis) => (
-                <Tr key={analysis.id}>
-                  <Td>{analysis.input_file}</Td>
-                  <Td>{analysis.extra_data?.timestamp ? formatTimestamp(analysis.extra_data.timestamp) : '-'}</Td>
-                  <Td>{analysis.method.toUpperCase()}</Td>
-                  <Td>{getStatusBadge(analysis.status)}</Td>
+              {uploads.map((upload) => (
+                <Tr key={upload.id}>
+                  <Td>{upload.filename}</Td>
+                  <Td>{formatDate(upload.created_at)}</Td>
                   <Td>
-                    {analysis.extra_data?.execution_metrics?.execution_time.toFixed(2)}초
-                  </Td>
-                  <Td>{analysis.extra_data?.execution_metrics?.sequence_count}</Td>
-                  <Td>
-                    {analysis.extra_data?.execution_metrics?.average_sequence_length.toFixed(1)}
-                  </Td>
-                  <Td>{formatDate(analysis.created_at)}</Td>
-                  <Td>
-                    <IconButton
-                      aria-label="Download result"
-                      icon={<FaDownload />}
-                      size="sm"
-                      colorScheme="blue"
-                      variant="ghost"
-                      isDisabled={!analysis.result_file}
-                      onClick={() => analysis.result_file && downloadResult(analysis.result_file)}
-                    />
-                    {analysis.error && (
-                      <Tooltip label={analysis.error}>
+                    {upload.analyses?.find(a => a.method === 'mafft')?.status === 'SUCCESS' ? (
+                      <HStack>
+                        <Badge colorScheme="green">완료</Badge>
                         <IconButton
-                          aria-label="Show error"
-                          icon={<FaInfoCircle />}
+                          aria-label="View MAFFT result"
+                          icon={<FaEye />}
+                          size="sm"
+                          onClick={() => {
+                            const mafftAnalysis = upload.analyses.find(a => a.method === 'mafft');
+                            if (mafftAnalysis) {
+                              viewResult(mafftAnalysis.id, 'mafft');
+                            }
+                          }}
+                        />
+                        <IconButton
+                          aria-label="Run Bluebase"
+                          icon={<FaCalculator />}
+                          size="sm"
+                          onClick={() => {
+                            const mafftAnalysis = upload.analyses.find(a => a.method === 'mafft' && a.status === 'SUCCESS');
+                            if (mafftAnalysis) {
+                              runBluebase('mafft');
+                            }
+                          }}
+                        />
+                      </HStack>
+                    ) : upload.analyses?.find(a => a.method === 'mafft')?.status === 'PENDING' || 
+                        upload.analyses?.find(a => a.method === 'mafft')?.status === 'STARTED' ? (
+                      <HStack>
+                        <Spinner size="sm" color="brand.primary" />
+                        <Badge colorScheme="yellow">진행 중</Badge>
+                      </HStack>
+                    ) : upload.analyses?.find(a => a.method === 'mafft')?.status === 'FAILURE' ? (
+                      <HStack>
+                        <Badge colorScheme="red">실패</Badge>
+                        <IconButton
+                          aria-label="Retry MAFFT"
+                          icon={<FaSync />}
                           size="sm"
                           colorScheme="red"
-                          variant="ghost"
-                          ml={2}
+                          onClick={() => runAnalysis(upload.id, 'mafft')}
                         />
-                      </Tooltip>
+                      </HStack>
+                    ) : (
+                      <IconButton
+                        aria-label="Run MAFFT"
+                        icon={<FaPlay />}
+                        size="sm"
+                        colorScheme="blue"
+                        onClick={() => runAnalysis(upload.id, 'mafft')}
+                      />
                     )}
+                  </Td>
+                  <Td>
+                    {upload.analyses?.find(a => a.method === 'uclust')?.status === 'SUCCESS' ? (
+                      <HStack>
+                        <Badge colorScheme="green">완료</Badge>
+                        <IconButton
+                          aria-label="View UCLUST result"
+                          icon={<FaEye />}
+                          size="sm"
+                          onClick={() => {
+                            const uclustAnalysis = upload.analyses.find(a => a.method === 'uclust');
+                            if (uclustAnalysis) {
+                              viewResult(uclustAnalysis.id, 'uclust');
+                            }
+                          }}
+                        />
+                        <IconButton
+                          aria-label="Run Bluebase"
+                          icon={<FaCalculator />}
+                          size="sm"
+                          onClick={() => {
+                            const uclustAnalysis = upload.analyses.find(a => a.method === 'uclust' && a.status === 'SUCCESS');
+                            if (uclustAnalysis) {
+                              runBluebase('uclust');
+                            }
+                          }}
+                        />
+                      </HStack>
+                    ) : upload.analyses?.find(a => a.method === 'uclust')?.status === 'PENDING' ? (
+                      <HStack>
+                        <Spinner size="sm" />
+                        <Badge colorScheme="yellow">진행 중</Badge>
+                      </HStack>
+                    ) : upload.analyses?.find(a => a.method === 'uclust')?.status === 'FAILURE' ? (
+                      <HStack>
+                        <Badge colorScheme="red">실패</Badge>
+                        <Button
+                          leftIcon={<FaPlay />}
+                          size="sm"
+                          onClick={() => runAnalysis(upload.id, 'uclust')}
+                        >
+                          재시도
+                        </Button>
+                      </HStack>
+                    ) : (
+                      <Button
+                        leftIcon={<FaPlay />}
+                        size="sm"
+                        onClick={() => runAnalysis(upload.id, 'uclust')}
+                      >
+                        실행
+                      </Button>
+                    )}
+                  </Td>
+                  <Td>
+                    <IconButton
+                      aria-label="Download original"
+                      icon={<FaDownload />}
+                      size="sm"
+                      onClick={() => downloadOriginal(upload.filename)}
+                    />
                   </Td>
                 </Tr>
               ))}
             </Tbody>
           </Table>
-          {analyses.length === 0 && (
-            <Text p={4} textAlign="center" color="gray.500">
-              분석 기록이 없습니다.
-            </Text>
-          )}
         </Box>
       </CardBody>
+
+      <ResultViewer
+        filePath={selectedAnalysis?.result_file || ''}
+        isOpen={isResultModalOpen}
+        onClose={() => setIsResultModalOpen(false)}
+        defaultTab={selectedTab}
+        showBluebaseButton={true}
+        onBluebaseClick={() => selectedAnalysis && runBluebase(selectedAnalysis.method as AlignmentMethod)}
+      />
     </Card>
   )
 } 

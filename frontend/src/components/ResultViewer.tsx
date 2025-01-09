@@ -20,17 +20,20 @@ import {
   Tab,
   TabPanel,
 } from '@chakra-ui/react'
-import { FaDownload } from 'react-icons/fa'
+import { FaDownload, FaCalculator } from 'react-icons/fa'
+import { api } from '../services/api'
+import { AlignmentMethod } from '../types/common'
 
 interface ResultViewerProps {
   filePath: string
-  apiUrl: string
   isOpen: boolean
   onClose: () => void
   defaultTab: number
+  showBluebaseButton?: boolean
+  onBluebaseClick?: () => void
 }
 
-export const ResultViewer = ({ filePath, apiUrl, isOpen, onClose, defaultTab }: ResultViewerProps) => {
+export const ResultViewer = ({ filePath, isOpen, onClose, defaultTab, showBluebaseButton, onBluebaseClick }: ResultViewerProps) => {
   const [mafftContent, setMafftContent] = useState<string>('')
   const [uclustContent, setUclustContent] = useState<string>('')
   const [loading, setLoading] = useState(true)
@@ -45,78 +48,53 @@ export const ResultViewer = ({ filePath, apiUrl, isOpen, onClose, defaultTab }: 
                                    .replace('_mafft', '')
                                    .replace('_uclust', '')
 
-        // 현재 실행된 방법 확인
         const isMafft = filePath.includes('mafft')
         const isUclust = filePath.includes('uclust')
 
-        console.log('Attempting to fetch results for:', {
-          baseFilename,
-          filePath,
-          isMafft,
-          isUclust
-        })
-
-        // MAFFT 결과만 가져오기
+        // MAFFT 결과 가져오기
         if (isMafft) {
-          const mafftResponse = await fetch(`${apiUrl}/results/${baseFilename}_mafft_result.fasta`, {
-            method: 'GET',
-            headers: {
-              'Accept': 'text/plain',
-            },
-          })
-          
-          if (!mafftResponse.ok) {
-            throw new Error(`MAFFT fetch failed: ${mafftResponse.statusText}`)
-          }
-
-          const mafftText = await mafftResponse.text()
-          setMafftContent(mafftText)
+          const mafftText = await api.getResult(`${baseFilename}_mafft_result.fasta`);
+          setMafftContent(mafftText);
         }
 
-        // UCLUST 결과만 가져오기
+        // UCLUST 결과 가져오기
         if (isUclust) {
-          const uclustResponse = await fetch(`${apiUrl}/results/${baseFilename}_uclust_result.fasta`, {
-            method: 'GET',
-            headers: {
-              'Accept': 'text/plain',
-            },
-          })
-          
-          if (!uclustResponse.ok) {
-            throw new Error(`UCLUST fetch failed: ${uclustResponse.statusText}`)
-          }
-
-          const uclustText = await uclustResponse.text()
-          setUclustContent(uclustText)
+          const uclustText = await api.getResult(`${baseFilename}_uclust_result.fasta`);
+          setUclustContent(uclustText);
         }
 
       } catch (error) {
-        console.error('Error in fetchContent:', error)
         toast({
           title: '결과 파일을 불러오는데 실패했습니다.',
           description: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.',
           status: 'error',
           duration: 3000,
-        })
+        });
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }
+    };
 
-    fetchContent()
-  }, [filePath, apiUrl, toast])
+    fetchContent();
+  }, [filePath, toast]);
+
+  const downloadFile = async (method: AlignmentMethod) => {
+    if (!filePath) return;
+    try {
+      await api.downloadResult(filePath);
+    } catch (error) {
+      toast({
+        title: '파일 다운로드에 실패했습니다.',
+        description: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.',
+        status: 'error',
+        duration: 3000,
+      });
+    }
+  };
 
   // pre 태그 렌더링 전에 내용 로깅
   useEffect(() => {
   }, [mafftContent, uclustContent])
-
-  const downloadFile = (type: 'mafft' | 'uclust') => {
-    if (!filePath) return;
-    const baseFilename = filePath.replace('_result.fasta', '')
-                                .replace('_mafft', '')
-                                .replace('_uclust', '')
-    window.open(`${apiUrl}/results/${baseFilename}_${type}_result.fasta`, '_blank')
-  }
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="6xl">
@@ -178,6 +156,16 @@ export const ResultViewer = ({ filePath, apiUrl, isOpen, onClose, defaultTab }: 
                 <TabPanel h="full" p={0}>
                   <VStack h="full" spacing={0}>
                     <HStack justify="flex-end" w="full" p={4} bg="gray.50">
+                      {showBluebaseButton && (
+                        <Button
+                          size="sm"
+                          leftIcon={<FaCalculator />}
+                          onClick={onBluebaseClick}
+                          variant="secondary"
+                        >
+                          Bluebase 계산
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         leftIcon={<FaDownload />}
@@ -210,6 +198,16 @@ export const ResultViewer = ({ filePath, apiUrl, isOpen, onClose, defaultTab }: 
                 <TabPanel h="full" p={0}>
                   <VStack h="full" spacing={0}>
                     <HStack justify="flex-end" w="full" p={4} bg="gray.50">
+                      {showBluebaseButton && (
+                        <Button
+                          size="sm"
+                          leftIcon={<FaCalculator />}
+                          onClick={onBluebaseClick}
+                          variant="secondary"
+                        >
+                          Bluebase 계산
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         leftIcon={<FaDownload />}

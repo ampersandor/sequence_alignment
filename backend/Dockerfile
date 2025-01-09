@@ -2,33 +2,33 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# 시스템 패키지 업데이트 및 빌드 도구 설치
+# Install system dependencies
 RUN apt-get update && \
-    apt-get install -y build-essential
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    postgresql-client \
+    curl && \
+    rm -rf /var/lib/apt/lists/*
 
-# MAFFT 설치
+# Install MAFFT
 COPY ./app/lib/mafft-7.487-without-extensions-src.tgz .
 RUN tar xvzf mafft-7.487-without-extensions-src.tgz && \
     cd mafft-7.487-without-extensions/core && \
-    make clean && \
-    make && \
-    make install && \
-    cd ../.. && \
-    rm -rf mafft-7.487-without-extensions* && \
-    apt-get remove -y build-essential && \
-    apt-get autoremove -y && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    make clean && make && make install && \
+    cd ../.. && rm -rf mafft-7.487-without-extensions*
 
-# UCLUST 바이너리 복사 및 실행 권한 부여
+# Copy UCLUST binary
 COPY ./app/lib/uclust /usr/local/bin/
 RUN chmod +x /usr/local/bin/uclust
 
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY ./app /app
+# Copy application code
+COPY . /app
 
 ENV PYTHONPATH=/app
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"] 
+# 직접 FastAPI 실행
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"] 

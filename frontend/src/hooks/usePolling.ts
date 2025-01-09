@@ -1,30 +1,32 @@
 import { useEffect, useCallback, useRef } from 'react'
 
+interface PollingOptions {
+  onError?: (error: unknown) => void;
+ enabled?: boolean;
+}
+
 export const usePolling = (
   callback: () => Promise<void>,
   interval: number,
-  enabled: boolean = true
+  options: PollingOptions = {}
 ) => {
-  const savedCallback = useRef(callback)
-
-  // callback이 변경될 때마다 ref 업데이트
-  useEffect(() => {
-    savedCallback.current = callback
-  }, [callback])
+  const{ enabled = true } = options;
 
   useEffect(() => {
-    if (!enabled) return
+    if (!enabled) return;
 
-    // 첫 실행
-    savedCallback.current()
+    const poll = async () => {
+      try {
+       await callback();
+      } catch (error) {
+        options.onError?.(error);
+      }
+    };
 
-    const intervalId = setInterval(() => {
-      savedCallback.current()
-    }, interval)
+    // 초기 실행
+    poll();
 
-    // cleanup function
-    return () => {
-      clearInterval(intervalId)
-    }
-  }, [interval, enabled]) // callback 제거, interval과 enabled만 의존성으로 사용
-} 
+    const intervalId = setInterval(poll, interval);
+    return () => clearInterval(intervalId);
+  }, [callback, interval, options.onError, enabled]);
+};
