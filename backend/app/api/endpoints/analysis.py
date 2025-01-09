@@ -12,14 +12,21 @@ import logging
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-@router.post("/{upload_id}")
+@router.post("/{method}/{upload_id}")
 async def create_analysis(
+    method: str,
     upload_id: int,
-    request: AlignmentRequest,
     db: Session = Depends(get_db)
 ):
     try:
-        # Upload 존재 여부 확인 추가
+        # method 유효성 검사
+        if method not in ['mafft', 'uclust']:
+            raise HTTPException(
+                status_code=400, 
+                detail="Invalid method. Must be either 'mafft' or 'uclust'"
+            )
+
+        # Upload 존재 여부 확인
         upload = db.query(Upload).filter(Upload.id == upload_id).first()
         if not upload:
             raise HTTPException(status_code=404, detail="Upload not found")
@@ -27,7 +34,7 @@ async def create_analysis(
         # 분석 레코드 생성
         analysis = Analysis(
             upload_id=upload_id,
-            method=request.method,
+            method=method,
             status="PENDING"
         )
         db.add(analysis)
@@ -35,7 +42,7 @@ async def create_analysis(
         db.refresh(analysis)
 
         # Celery 태스크 시작
-        task = align_sequences.delay(upload_id, request.method)
+        task = align_sequences.delay(upload_id, method)
 
         # task_id를 extra_data에 저장
         analysis.extra_data = {"task_id": task.id}

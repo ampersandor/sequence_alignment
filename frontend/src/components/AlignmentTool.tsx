@@ -13,7 +13,7 @@ import {
   useToast,
   Spinner,
 } from '@chakra-ui/react'
-import { FaUpload, FaPlay, FaCalculator } from 'react-icons/fa'
+import { FaUpload, FaPlay, FaCalculator, FaFile, FaPlus } from 'react-icons/fa'
 import { ResultViewer } from './ResultViewer'
 import { api } from '../services/api'
 import { AlignmentMethod, TaskStatus } from '../types/common'
@@ -133,6 +133,12 @@ export const AlignmentTool = () => {
         duration: 3000,
       });
 
+      setSelectedFile(null);
+      const fileInput = document.getElementById('file-input') as HTMLInputElement;
+      if (fileInput) {
+        fileInput.value = '';
+      }
+
       window.dispatchEvent(new Event('analysisUpdated'));
     } catch (error) {
       handleError(error);
@@ -183,7 +189,7 @@ export const AlignmentTool = () => {
       <VStack spacing={8}>
         <Card w="full">
           <CardBody bg="brand.light" p={8}>
-            <VStack spacing={6} align="stretch">
+            <VStack spacing={6} align="center" maxW="900px" mx="auto">
               <Box w="full">
                 <input
                   type="file"
@@ -214,33 +220,50 @@ export const AlignmentTool = () => {
               </Box>
 
               {selectedFile && (
-                <VStack spacing={4} w="full" align="stretch">
-                  <Text color="brand.primary" fontSize="lg" fontWeight="500">
-                    선택된 파일: <strong>{selectedFile.name}</strong>
-                  </Text>
+                <HStack spacing={4} w="full" align="center" justify="center">
+                  <HStack 
+                    flex={1}
+                    maxW="600px"
+                    p={4} 
+                    bg="gray.50" 
+                    borderRadius="lg"
+                    border="1px"
+                    borderColor="gray.200"
+                  >
+                    <Box
+                      bg="brand.primary"
+                      p={2}
+                      borderRadius="md"
+                      color="white"
+                    >
+                      <FaFile />
+                    </Box>
+                    <Text color="gray.700" fontSize="lg" fontWeight="500">
+                      {selectedFile.name}
+                    </Text>
+                  </HStack>
                   
                   {!uploadId && (
                     <Button
-                      w="full"
-                      bg="brand.primary"
-                      color="white"
-                      onClick={createAlignJob}
+                      colorScheme="green"
                       size="lg"
                       h="50px"
-                      fontSize="lg"
-                      fontWeight="500"
+                      px={8}
+                      leftIcon={<FaPlus />}
+                      onClick={createAlignJob}
                       _hover={{
-                        bg: "brand.secondaryLight",
+                        transform: "translateY(-2px)",
+                        boxShadow: "lg",
                       }}
                       _active={{
-                        bg: "brand.secondary",
-                        transform: "scale(0.98)"
+                        transform: "translateY(0)",
                       }}
+                      transition="all 0.2s"
                     >
-                      작업 생성하기
+                      작업 생성
                     </Button>
                   )}
-                </VStack>
+                </HStack>
               )}
               
             </VStack>

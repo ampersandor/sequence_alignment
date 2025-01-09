@@ -20,12 +20,11 @@ export const api = {
 
   // 분석 시작
   startAnalysis: async (uploadId: number, method: 'mafft' | 'uclust') => {
-    const response = await fetch(`${API_URL}/analysis/${uploadId}`, {
+    const response = await fetch(`${API_URL}/analysis/${method}/${uploadId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ method }),
+      }
     });
 
     if (!response.ok) {

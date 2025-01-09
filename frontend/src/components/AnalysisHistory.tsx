@@ -36,8 +36,10 @@ export const AnalysisHistory = () => {
   const fetchUploads = async () => {
     try {
       const data = await api.getUploads();
-      console.log(data);
-      setUploads(data);
+      const sortedData = data.sort((a: Upload, b: Upload) => 
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+      setUploads(sortedData);
     } catch (error) {
       handleError(error);
     }
@@ -215,127 +217,129 @@ export const AnalysisHistory = () => {
               </Tr>
             </Thead>
             <Tbody>
-              {uploads.map((upload) => (
-                <Tr key={upload.id}>
-                  <Td>{upload.filename}</Td>
-                  <Td>{formatDate(upload.created_at)}</Td>
-                  <Td>
-                    {upload.analyses?.find(a => a.method === 'mafft')?.status === 'SUCCESS' ? (
-                      <HStack>
-                        <Badge colorScheme="green">완료</Badge>
-                        <IconButton
-                          aria-label="View MAFFT result"
-                          icon={<FaEye />}
-                          size="sm"
-                          onClick={() => {
-                            const mafftAnalysis = upload.analyses.find(a => a.method === 'mafft');
-                            if (mafftAnalysis) {
-                              viewResult(mafftAnalysis.id, 'mafft');
-                            }
-                          }}
-                        />
-                        <IconButton
-                          aria-label="Run Bluebase"
-                          icon={<FaCalculator />}
-                          size="sm"
-                          onClick={() => {
-                            const mafftAnalysis = upload.analyses.find(a => a.method === 'mafft' && a.status === 'SUCCESS');
-                            if (mafftAnalysis) {
-                              runBluebase('mafft');
-                            }
-                          }}
-                        />
-                      </HStack>
-                    ) : upload.analyses?.find(a => a.method === 'mafft')?.status === 'PENDING' || 
-                        upload.analyses?.find(a => a.method === 'mafft')?.status === 'STARTED' ? (
-                      <HStack>
-                        <Spinner size="sm" color="brand.primary" />
-                        <Badge colorScheme="yellow">진행 중</Badge>
-                      </HStack>
-                    ) : upload.analyses?.find(a => a.method === 'mafft')?.status === 'FAILURE' ? (
-                      <HStack>
-                        <Badge colorScheme="red">실패</Badge>
-                        <IconButton
-                          aria-label="Retry MAFFT"
-                          icon={<FaSync />}
-                          size="sm"
-                          colorScheme="red"
-                          onClick={() => runAnalysis(upload.id, 'mafft')}
-                        />
-                      </HStack>
-                    ) : (
-                      <IconButton
-                        aria-label="Run MAFFT"
-                        icon={<FaPlay />}
+              {uploads
+                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                .map((upload) => (
+                  <Tr key={upload.id}>
+                    <Td>{upload.filename}</Td>
+                    <Td>{formatDate(upload.created_at)}</Td>
+                    <Td>
+                      {upload.analyses?.find(a => a.method === 'mafft')?.status === 'SUCCESS' ? (
+                        <HStack>
+                          <Badge colorScheme="green">완료</Badge>
+                          <IconButton
+                            aria-label="View MAFFT result"
+                            icon={<FaEye />}
+                            size="sm"
+                            onClick={() => {
+                              const mafftAnalysis = upload.analyses.find(a => a.method === 'mafft');
+                              if (mafftAnalysis) {
+                                viewResult(mafftAnalysis.id, 'mafft');
+                              }
+                            }}
+                          />
+                          <IconButton
+                            aria-label="Run Bluebase"
+                            icon={<FaCalculator />}
+                            size="sm"
+                            onClick={() => {
+                              const mafftAnalysis = upload.analyses.find(a => a.method === 'mafft' && a.status === 'SUCCESS');
+                              if (mafftAnalysis) {
+                                runBluebase('mafft');
+                              }
+                            }}
+                          />
+                        </HStack>
+                      ) : upload.analyses?.find(a => a.method === 'mafft')?.status === 'PENDING' || 
+                          upload.analyses?.find(a => a.method === 'mafft')?.status === 'STARTED' ? (
+                        <HStack>
+                          <Spinner size="sm" color="brand.primary" />
+                          <Badge colorScheme="yellow">진행 중</Badge>
+                        </HStack>
+                      ) : upload.analyses?.find(a => a.method === 'mafft')?.status === 'FAILURE' ? (
+                        <HStack>
+                          <Badge colorScheme="red">실패</Badge>
+                          <IconButton
+                            aria-label="Retry MAFFT"
+                            icon={<FaSync />}
+                            size="sm"
+                            colorScheme="red"
+                            onClick={() => runAnalysis(upload.id, 'mafft')}
+                          />
+                        </HStack>
+                      ) : (
+                        <Button
+                        leftIcon={<FaPlay />}
                         size="sm"
-                        colorScheme="blue"
                         onClick={() => runAnalysis(upload.id, 'mafft')}
-                      />
-                    )}
-                  </Td>
-                  <Td>
-                    {upload.analyses?.find(a => a.method === 'uclust')?.status === 'SUCCESS' ? (
-                      <HStack>
-                        <Badge colorScheme="green">완료</Badge>
-                        <IconButton
-                          aria-label="View UCLUST result"
-                          icon={<FaEye />}
-                          size="sm"
-                          onClick={() => {
-                            const uclustAnalysis = upload.analyses.find(a => a.method === 'uclust');
-                            if (uclustAnalysis) {
-                              viewResult(uclustAnalysis.id, 'uclust');
-                            }
-                          }}
-                        />
-                        <IconButton
-                          aria-label="Run Bluebase"
-                          icon={<FaCalculator />}
-                          size="sm"
-                          onClick={() => {
-                            const uclustAnalysis = upload.analyses.find(a => a.method === 'uclust' && a.status === 'SUCCESS');
-                            if (uclustAnalysis) {
-                              runBluebase('uclust');
-                            }
-                          }}
-                        />
-                      </HStack>
-                    ) : upload.analyses?.find(a => a.method === 'uclust')?.status === 'PENDING' ? (
-                      <HStack>
-                        <Spinner size="sm" />
-                        <Badge colorScheme="yellow">진행 중</Badge>
-                      </HStack>
-                    ) : upload.analyses?.find(a => a.method === 'uclust')?.status === 'FAILURE' ? (
-                      <HStack>
-                        <Badge colorScheme="red">실패</Badge>
+                      >
+                        실행
+                      </Button>
+                      )}
+                    </Td>
+                    <Td>
+                      {upload.analyses?.find(a => a.method === 'uclust')?.status === 'SUCCESS' ? (
+                        <HStack>
+                          <Badge colorScheme="green">완료</Badge>
+                          <IconButton
+                            aria-label="View UCLUST result"
+                            icon={<FaEye />}
+                            size="sm"
+                            onClick={() => {
+                              const uclustAnalysis = upload.analyses.find(a => a.method === 'uclust');
+                              if (uclustAnalysis) {
+                                viewResult(uclustAnalysis.id, 'uclust');
+                              }
+                            }}
+                          />
+                          <IconButton
+                            aria-label="Run Bluebase"
+                            icon={<FaCalculator />}
+                            size="sm"
+                            onClick={() => {
+                              const uclustAnalysis = upload.analyses.find(a => a.method === 'uclust' && a.status === 'SUCCESS');
+                              if (uclustAnalysis) {
+                                runBluebase('uclust');
+                              }
+                            }}
+                          />
+                        </HStack>
+                      ) : upload.analyses?.find(a => a.method === 'uclust')?.status === 'PENDING' ? (
+                        <HStack>
+                          <Spinner size="sm" />
+                          <Badge colorScheme="yellow">진행 중</Badge>
+                        </HStack>
+                      ) : upload.analyses?.find(a => a.method === 'uclust')?.status === 'FAILURE' ? (
+                        <HStack>
+                          <Badge colorScheme="red">실패</Badge>
+                          <Button
+                            leftIcon={<FaPlay />}
+                            size="sm"
+                            onClick={() => runAnalysis(upload.id, 'uclust')}
+                          >
+                            재시도
+                          </Button>
+                        </HStack>
+                      ) : (
                         <Button
                           leftIcon={<FaPlay />}
                           size="sm"
                           onClick={() => runAnalysis(upload.id, 'uclust')}
                         >
-                          재시도
+                          실행
                         </Button>
-                      </HStack>
-                    ) : (
-                      <Button
-                        leftIcon={<FaPlay />}
+                      )}
+                    </Td>
+                    <Td>
+                      <IconButton
+                        aria-label="Download original"
+                        icon={<FaDownload />}
                         size="sm"
-                        onClick={() => runAnalysis(upload.id, 'uclust')}
-                      >
-                        실행
-                      </Button>
-                    )}
-                  </Td>
-                  <Td>
-                    <IconButton
-                      aria-label="Download original"
-                      icon={<FaDownload />}
-                      size="sm"
-                      onClick={() => downloadOriginal(upload.filename)}
-                    />
-                  </Td>
-                </Tr>
-              ))}
+                        onClick={() => downloadOriginal(upload.filename)}
+                      />
+                    </Td>
+                  </Tr>
+                ))}
             </Tbody>
           </Table>
         </Box>

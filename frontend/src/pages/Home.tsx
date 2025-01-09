@@ -18,7 +18,7 @@ export const Home = () => {
               Sequence Alignment Tool
             </Heading>
             <Text fontSize="lg" color="gray.600">
-              Sequence Alignment Tool using MAFFT and UCLUST
+              using MAFFT and UCLUST
             </Text>
           </Box>
           
