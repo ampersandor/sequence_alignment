@@ -1,13 +1,13 @@
 from fastapi import APIRouter, Depends, UploadFile, File
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.models import Upload
+from app.models import Upload, Analysis
 import os
 from app.core.config import settings
 import uuid
 from datetime import datetime
 from sqlalchemy.orm import joinedload
-from app.schemas.analysis import UploadWithAnalyses, AnalysisBase
+from app.schemas.analysis import UploadWithAnalyses, AnalysisBase, BluebaseResultBase
 from typing import List
 
 router = APIRouter()
@@ -45,7 +45,7 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db
 @router.get("", response_model=List[UploadWithAnalyses])
 def get_uploads(db: Session = Depends(get_db)):
     uploads = db.query(Upload).options(
-        joinedload(Upload.analyses)
+        joinedload(Upload.analyses).joinedload(Analysis.bluebase_result)
     ).all()
     
     # SQLAlchemy 모델을 Pydantic 모델로 명시적 변환
@@ -63,7 +63,14 @@ def get_uploads(db: Session = Depends(get_db)):
                     result_file=analysis.result_file,
                     error=analysis.error,
                     created_at=analysis.created_at,
-                    extra_data=analysis.extra_data
+                    extra_data=analysis.extra_data,
+                    bluebase_result=(
+                        BluebaseResultBase(
+                            alignment_stats_file=analysis.bluebase_result.alignment_stats_file,
+                            gap_stats_file=analysis.bluebase_result.gap_stats_file,
+                            created_at=analysis.bluebase_result.created_at
+                        ) if analysis.bluebase_result else None
+                    )
                 ) for analysis in upload.analyses
             ]
         ) for upload in uploads

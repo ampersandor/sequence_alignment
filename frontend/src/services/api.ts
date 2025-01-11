@@ -1,5 +1,5 @@
 const API_URL = import.meta.env.VITE_API_URL;
-
+console.log(API_URL);
 export const api = {
   // 파일 업로드
   uploadFile: async (file: File) => {
@@ -64,19 +64,6 @@ export const api = {
       throw new Error('Failed to fetch uploads');
     }
     
-    return response.json();
-  },
-
-  // Bluebase 계산
-  calculateBluebase: async (input_file: string) => {
-    const response = await fetch(`${API_URL}/analysis/bluebase/${input_file}`, {
-      method: 'POST',
-    });
-
-    if (!response.ok) {
-      throw new Error('Bluebase calculation failed');
-    }
-
     return response.json();
   },
 

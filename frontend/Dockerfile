@@ -1,18 +1,31 @@
-# linux/amd64 플랫폼 명시
-FROM --platform=linux/amd64 node:20-slim
+# Build stage
+FROM --platform=linux/amd64 node:20-slim AS builder
 
 WORKDIR /app
 
+# Copy package files
 COPY package*.json ./
 
-# 의존성 설치
-RUN npm install && \
-    npm install -D @vitejs/plugin-react vite
+# Install dependencies
+RUN npm install
 
+# Copy source code
 COPY . .
 
-# Vite의 호스트 설정 추가
-ENV VITE_API_URL=http://backend:8000
+# Build the application
+RUN npm run build
 
-EXPOSE 3000
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"] 
+# Production stage
+FROM --platform=linux/amd64 nginx:alpine
+
+# Copy built assets from builder stage
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Copy nginx configuration if you have custom config
+# COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Expose port 80
+EXPOSE 80
+
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"] 

@@ -1,30 +1,18 @@
 export interface Analysis {
   id: number;
-  input_file: string;
+  upload_id: number;
   method: string;
   status: string;
   result_file: string | null;
   error: string | null;
-  created_at: string;
-  updated_at: string;
   extra_data: {
-    unique_filename?: string;
-    timestamp?: number;
-    execution_metrics?: {
-      execution_time: number;
-      sequence_count: number;
-      average_sequence_length: number;
-    };
-    parameters?: {
-      method: string;
-      mafft: {
-        retree: number;
-        thread: number;
-      } | null;
-      uclust: {
-        id: number;
-        maxlen: number;
-      } | null;
-    };
+    task_id?: string;
+    start_time?: string;
   } | null;
+  bluebase_result?: {
+    alignment_stats_file: string;
+    gap_stats_file: string;
+    created_at: string;
+  };
+  created_at: string;
 } 

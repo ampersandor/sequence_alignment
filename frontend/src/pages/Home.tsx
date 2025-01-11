@@ -5,7 +5,7 @@ import {
   Text,
   VStack,
 } from '@chakra-ui/react'
-import { AlignmentTool } from '../components/AlignmentTool'
+import { Uploader } from '../components/Uploader'
 import { AnalysisHistory } from '../components/AnalysisHistory'
 
 export const Home = () => {
@@ -22,7 +22,7 @@ export const Home = () => {
             </Text>
           </Box>
           
-          <AlignmentTool />
+          <Uploader />
           <AnalysisHistory />
         </VStack>
       </Container>

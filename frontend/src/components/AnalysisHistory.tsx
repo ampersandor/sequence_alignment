@@ -17,21 +17,29 @@ import {
   useToast,
   HStack,
   Spinner,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalCloseButton,
+  ModalBody,
 } from '@chakra-ui/react'
-import { FaDownload, FaSync, FaCalculator, FaEye, FaPlay } from 'react-icons/fa'
+import { FaDownload, FaSync, FaEye, FaPlay, FaExclamationCircle } from 'react-icons/fa'
 import { Upload } from '../types/upload'
 import { usePolling } from '../hooks/usePolling'
-import { ResultViewer } from './ResultViewer'
+import { ResultViewer } from './ResultViewer/ResultViewer'
 import { api } from '../services/api'
 import { AlignmentMethod } from '../types/common'
+import { Analysis } from '../types/analysis'
 
 export const AnalysisHistory = () => {
   const [uploads, setUploads] = useState<Upload[]>([])
-  const [selectedAnalysis, setSelectedAnalysis] = useState<Upload['analyses'][0] | null>(null)
   const [isResultModalOpen, setIsResultModalOpen] = useState(false)
-  const [selectedTab, setSelectedTab] = useState(0)
+  const [selectedAnalysis, setSelectedAnalysis] = useState<Analysis | null>(null)
   const [isPollingEnabled, setIsPollingEnabled] = useState(true)
   const toast = useToast()
+  const [errorModalOpen, setErrorModalOpen] = useState(false)
+  const [selectedError, setSelectedError] = useState<string | null>(null)
 
   const fetchUploads = async () => {
     try {
@@ -53,6 +61,7 @@ export const AnalysisHistory = () => {
       duration: 5000,
     });
   };
+  
 
   const allAnalysesCompleted = useCallback(() => {
     return uploads.every(upload => 
@@ -118,17 +127,6 @@ export const AnalysisHistory = () => {
     };
   }, []);
 
-  const getStatusBadge = (status: string) => {
-    const statusProps = {
-      PENDING: { colorScheme: 'yellow', text: '진행 중' },
-      SUCCESS: { colorScheme: 'green', text: '완료' },
-      FAILURE: { colorScheme: 'red', text: '실패' },
-      STARTED: { colorScheme: 'blue', text: '시작됨' },
-    }[status] || { colorScheme: 'gray', text: status }
-
-    return <Badge colorScheme={statusProps.colorScheme}>{statusProps.text}</Badge>
-  }
-
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString('ko-KR')
   }
@@ -155,43 +153,37 @@ export const AnalysisHistory = () => {
     }
   };
 
-  const runBluebase = async (method: AlignmentMethod) => {
-    if (!selectedAnalysis) return;
+  const handleViewResult = (analysis: Analysis) => {
+    if (!analysis.result_file) return;
 
-    try {
-      const filename = selectedAnalysis.result_file?.split('_')[0];
-      if (!filename) throw new Error('Invalid filename');
-      
-      await api.calculateBluebase(filename, method);
-      toast({
-        title: `${method.toUpperCase()} Bluebase 계산이 완료되었습니다.`,
-        status: 'success',
-        duration: 3000,
-      });
-    } catch (error) {
-      handleError(error);
-    }
+    setSelectedAnalysis(analysis);
+    setIsResultModalOpen(true);
   };
 
-  const viewResult = (analysisId: number, method: AlignmentMethod) => {
-    const upload = uploads.find(u => 
-      u.analyses.some(a => a.id === analysisId && a.method === method && a.status === 'SUCCESS')
-    );
-    
-    if (upload) {
-      const foundAnalysis = upload.analyses.find(a => 
-        a.id === analysisId && a.method === method && a.status === 'SUCCESS'
-      );
-      if (foundAnalysis) {
-        setSelectedAnalysis(foundAnalysis);
-        setSelectedTab(method === 'mafft' ? 0 : 1);
-        setIsResultModalOpen(true);
-      }
-    }
-  };
+  const ErrorModal = ({ isOpen, onClose, error }: { isOpen: boolean; onClose: () => void; error: string }) => (
+    <Modal isOpen={isOpen} onClose={onClose} size="xl">
+      <ModalOverlay />
+      <ModalContent>
+        <ModalHeader color="red.500">Error Details</ModalHeader>
+        <ModalCloseButton />
+        <ModalBody pb={6}>
+          <Box
+            bg="gray.50"
+            p={4}
+            borderRadius="md"
+            fontFamily="monospace"
+            whiteSpace="pre-wrap"
+            overflowX="auto"
+          >
+            {error}
+          </Box>
+        </ModalBody>
+      </ModalContent>
+    </Modal>
+  );
 
   return (
-    <Card variant="outline" w="full" mt={8}id="analysis-history">
+    <Card variant="outline" w="full" mt={8} id="analysis-history">
       <CardHeader bg="brand.primary" py={4}>
         <HStack justify="space-between">
           <Heading size="md" color="brand.light">로드된 파일</Heading>
@@ -234,18 +226,7 @@ export const AnalysisHistory = () => {
                             onClick={() => {
                               const mafftAnalysis = upload.analyses.find(a => a.method === 'mafft');
                               if (mafftAnalysis) {
-                                viewResult(mafftAnalysis.id, 'mafft');
-                              }
-                            }}
-                          />
-                          <IconButton
-                            aria-label="Run Bluebase"
-                            icon={<FaCalculator />}
-                            size="sm"
-                            onClick={() => {
-                              const mafftAnalysis = upload.analyses.find(a => a.method === 'mafft' && a.status === 'SUCCESS');
-                              if (mafftAnalysis) {
-                                runBluebase('mafft');
+                                handleViewResult(mafftAnalysis);
                               }
                             }}
                           />
@@ -288,18 +269,7 @@ export const AnalysisHistory = () => {
                             onClick={() => {
                               const uclustAnalysis = upload.analyses.find(a => a.method === 'uclust');
                               if (uclustAnalysis) {
-                                viewResult(uclustAnalysis.id, 'uclust');
-                              }
-                            }}
-                          />
-                          <IconButton
-                            aria-label="Run Bluebase"
-                            icon={<FaCalculator />}
-                            size="sm"
-                            onClick={() => {
-                              const uclustAnalysis = upload.analyses.find(a => a.method === 'uclust' && a.status === 'SUCCESS');
-                              if (uclustAnalysis) {
-                                runBluebase('uclust');
+                                handleViewResult(uclustAnalysis);
                               }
                             }}
                           />
@@ -312,13 +282,16 @@ export const AnalysisHistory = () => {
                       ) : upload.analyses?.find(a => a.method === 'uclust')?.status === 'FAILURE' ? (
                         <HStack>
                           <Badge colorScheme="red">실패</Badge>
-                          <Button
-                            leftIcon={<FaPlay />}
-                            size="sm"
-                            onClick={() => runAnalysis(upload.id, 'uclust')}
-                          >
-                            재시도
-                          </Button>
+                          <IconButton
+                        aria-label="Show error"
+                            icon={<FaExclamationCircle />}
+                            size="xs"
+                            colorScheme="red"
+                            onClick={() => {
+                              setSelectedError(upload.analyses?.find(a => a.method === 'uclust')?.error || 'No error details available');
+                              setErrorModalOpen(true);
+                            }}
+                          />
                         </HStack>
                       ) : (
                         <Button
@@ -345,13 +318,43 @@ export const AnalysisHistory = () => {
         </Box>
       </CardBody>
 
-      <ResultViewer
-        filePath={selectedAnalysis?.result_file || ''}
-        isOpen={isResultModalOpen}
-        onClose={() => setIsResultModalOpen(false)}
-        defaultTab={selectedTab}
-        showBluebaseButton={true}
-        onBluebaseClick={() => selectedAnalysis && runBluebase(selectedAnalysis.method as AlignmentMethod)}
+      {isResultModalOpen && selectedAnalysis && (
+        <ResultViewer
+          filePath={selectedAnalysis.result_file!}
+          isOpen={isResultModalOpen}
+          onClose={() => {
+            setIsResultModalOpen(false);
+            setSelectedAnalysis(null);
+          }}
+          defaultTab={selectedAnalysis.method === 'mafft' ? 0 : 1}
+          availableMethods={{
+            mafft: uploads.some(upload => 
+              upload.analyses.some(a => 
+                a.method === 'mafft' && 
+                a.status === 'SUCCESS' && 
+                a.result_file === selectedAnalysis.result_file?.replace(/_[^_]+_result\.fasta$/, '_mafft_result.fasta')
+              )
+            ),
+            uclust: uploads.some(upload => 
+              upload.analyses.some(a => 
+                a.method === 'uclust' && 
+                a.status === 'SUCCESS' && 
+                a.result_file === selectedAnalysis.result_file?.replace(/_[^_]+_result\.fasta$/, '_uclust_result.fasta')
+              )
+            )
+          }}
+          bluebaseResult={selectedAnalysis.bluebase_result}
+          originalMethod={selectedAnalysis.method as 'mafft' | 'uclust'}
+        />
+      )}
+
+      <ErrorModal
+        isOpen={errorModalOpen}
+        onClose={() => {
+          setErrorModalOpen(false);
+          setSelectedError(null);
+        }}
+        error={selectedError || ''}
       />
     </Card>
   )

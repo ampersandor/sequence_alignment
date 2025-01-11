@@ -1,11 +1,4 @@
-export interface Analysis {
-  id: number;
-  method: string;
-  status: string;
-  result_file: string | null;
-  created_at: string;
-  extra_data: any;
-}
+import { Analysis } from './analysis'
 
 export interface Upload {
   id: number;

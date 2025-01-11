@@ -1,8 +1,9 @@
 import { useEffect, useCallback, useRef } from 'react'
 
 interface PollingOptions {
+  onSuccess?: () => void;
   onError?: (error: unknown) => void;
- enabled?: boolean;
+  enabled?: boolean;
 }
 
 export const usePolling = (
@@ -18,6 +19,7 @@ export const usePolling = (
     const poll = async () => {
       try {
        await callback();
+       options.onSuccess?.();
       } catch (error) {
         options.onError?.(error);
       }

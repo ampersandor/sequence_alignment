@@ -1,7 +1,7 @@
 from celery import Task
 from sqlalchemy.orm import Session
 from app.db.database import SessionLocal
-from app.models import Analysis
+from app.models import Analysis, BluebaseResult
 from app.workers import celery
 from app.workers.bluebase import BlueBase
 
@@ -10,7 +10,6 @@ import os
 from app.core.config import settings
 import logging
 from datetime import datetime
-import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -96,49 +95,76 @@ def run_uclust_alignment(input_file: str, output_file: str) -> subprocess.Comple
     logger.info(f"UCLUST alignment completed successfully. Output saved to: {output_file}")
     return process3
 
-
 @celery.task(bind=True, base=AlignmentTask)
-def align_sequences(self, upload_id: int, method: str):
+def align_sequences(self, analysis_id: int):
     """
     시퀀스 정렬을 수행하는 Celery 태스크
     """
     db = SessionLocal()
+    start_time = datetime.now()
     try:
-        analysis = db.query(Analysis).filter(Analysis.upload_id == upload_id, Analysis.method == method).first()
-
+        # analysis_id로 직접 조회
+        analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first()
         if not analysis:
-            raise ValueError(f"Analysis not found for upload_id: {upload_id} and method: {method}")
+            raise ValueError(f"Analysis not found for id: {analysis_id}")
+
+        # 시작 시간과 task_id 저장
+        analysis.extra_data = {
+            "task_id": self.request.id,
+            "start_time": start_time.isoformat()
+        }
+        db.commit()
 
         input_file = os.path.join(settings.UPLOAD_DIR, analysis.upload.stored_filename)
         if not os.path.exists(input_file):
             raise FileNotFoundError(f"Input file not found: {input_file}")
 
+        # 원본 파일명에서 timestamp와 unique_id 추출 (뒤에서부터)
+        filename_parts = os.path.splitext(analysis.upload.stored_filename)[0].split('_')
+        timestamp = f"{filename_parts[-3]}_{filename_parts[-2]}"
+        unique_id = filename_parts[-1]
+
+        # 결과 파일명 생성 (원본의 timestamp와 unique_id 재사용)
         base_filename = os.path.splitext(analysis.upload.filename)[0]
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        unique_id = str(uuid.uuid4())[:8]
-        result_filename = f"{base_filename}_{timestamp}_{unique_id}_{method}_result.fasta"
+        result_filename = f"{base_filename}_{timestamp}_{unique_id}_{analysis.method}_result.fasta"
         result_file = os.path.join(settings.RESULT_DIR, result_filename)
 
         # 메소드에 따라 적절한 정렬 함수 호출
-        if method == "mafft":
+        if analysis.method == "mafft":
             process = run_mafft_alignment(input_file, result_file)
-        elif method == "uclust":
+        elif analysis.method == "uclust":
             process = run_uclust_alignment(input_file, result_file)
         else:
-            raise ValueError(f"Unsupported method: {method}")
+            raise ValueError(f"Unsupported method: {analysis.method}")
+
+        # 종료 시간 및 실행 시간 계산
+        end_time = datetime.now()
+        execution_time = (end_time - start_time).total_seconds()
 
         # 분석 결과 업데이트
-        analysis.status = "SUCCESS"
+        analysis.status = "PENDING"
         analysis.result_file = result_filename
+        analysis.extra_data.update({
+            "end_time": end_time.isoformat(),
+            "execution_time": execution_time
+        })
         db.commit()
 
-        return {"status": "SUCCESS", "result_file": result_filename}
+        # bluebase 계산을 위해 결과 파일 경로와 분석 ID 반환
+        return result_file
 
     except Exception as e:
+        end_time = datetime.now()
+        execution_time = (end_time - start_time).total_seconds()
+        
         logger.error(f"Error in alignment task: {str(e)}")
         if analysis:
             analysis.status = "FAILURE"
             analysis.error = str(e)
+            analysis.extra_data.update({
+                "end_time": end_time.isoformat(),
+                "execution_time": execution_time
+            })
             db.commit()
         raise
 
@@ -146,44 +172,47 @@ def align_sequences(self, upload_id: int, method: str):
         db.close()
 
 
-@celery.task(bind=True)
-def calculate_bluebase_task(self, input_path: str, output_path: str) -> dict:
+@celery.task
+def calculate_bluebase_task(alignment_result: str, analysis_id: int):
     """
     Bluebase 계산을 수행하는 Celery 태스크
-
-    Args:
-        input_path (str): 입력 FASTA 파일 경로
-        output_path (str): 결과 파일 경로
-
-    Returns:
-        dict: 작업 결과 정보를 담은 딕셔너리
     """
-
-    logger.info(f"Starting Bluebase calculation for: {input_path}")
-
+    db = SessionLocal()
     try:
-        # TODO: 실제 Bluebase 계산 로직 구현
-        # 1. FASTA 파일 읽기
-        # 2. 시퀀스 분석
-        # 3. Bluebase 계산
-        # 4. 결과 파일 저장
-        output_prefix = input_path.replace(".fa", "_final")
-
-        if os.path.exists(input_path) and os.path.getsize(input_path) > 0:
-            align_stat_outputfile, gap_stat_outputfile = BlueBase(input_path, output_prefix).main()
-
-        logger.info(f"Bluebase calculation completed. Results saved to: {output_path}")
+        # 원본 파일명에서 확장자 제거
+        analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first()
+        base_filename = os.path.splitext(os.path.basename(alignment_result))[0]
+        
+        # BlueBase 결과 파일명 생성
+        output_prefix = os.path.join(settings.RESULT_DIR, f"{base_filename}_bluebase")
+        
+        # Bluebase 계산 수행
+        bluebase = BlueBase(alignment_result, output_prefix)
+        align_stat_file, gap_stat_file = bluebase.main()
+        
+        # BlueBase 결과를 데이터베이스에 저장
+        bluebase_result = BluebaseResult(
+            analysis_id=analysis_id,
+            alignment_stats_file=os.path.basename(align_stat_file),
+            gap_stats_file=os.path.basename(gap_stat_file)
+        )
+        db.add(bluebase_result)
+        analysis.status = "SUCCESS"
+        
+        db.commit()
 
         return {
             "status": "SUCCESS",
-            "result_file": os.path.basename(output_path),
-            "metrics": {
-                "input_file": os.path.basename(input_path),
-                "output_file": os.path.basename(output_path),
-                "timestamp": datetime.now().isoformat(),
-            },
+            "result_files": {
+                "alignment": os.path.basename(alignment_result),
+                "alignment_stats": os.path.basename(align_stat_file),
+                "gap_stats": os.path.basename(gap_stat_file)
+            }
         }
 
     except Exception as e:
         logger.error(f"Error in Bluebase calculation: {str(e)}")
-        raise RuntimeError(f"Bluebase calculation failed: {str(e)}")
+        raise
+    finally:
+        db.close()
+

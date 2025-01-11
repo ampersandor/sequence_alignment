@@ -2,6 +2,16 @@ from pydantic import BaseModel
 from typing import Optional, Dict, Any, Union, List
 from datetime import datetime
 
+class BluebaseResultBase(BaseModel):
+    alignment_stats_file: str
+    gap_stats_file: str
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+        populate_by_name = True 
+
+        
 # Analysis 관련 스키마
 class AnalysisBase(BaseModel):
     id: int
@@ -11,6 +21,7 @@ class AnalysisBase(BaseModel):
     error: Optional[str]
     created_at: datetime
     extra_data: Optional[Dict[str, Any]] = None
+    bluebase_result: Optional[BluebaseResultBase] = None
     
     class Config:
         from_attributes = True
@@ -62,3 +73,4 @@ class TaskStatus(BaseModel):
     
     class Config:
         from_attributes = True 
+
