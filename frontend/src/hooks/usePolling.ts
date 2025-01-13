@@ -1,9 +1,10 @@
-import { useEffect, useCallback, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 
 interface PollingOptions {
   onSuccess?: () => void;
   onError?: (error: unknown) => void;
   enabled?: boolean;
+  immediate?: boolean;
 }
 
 export const usePolling = (
@@ -11,24 +12,39 @@ export const usePolling = (
   interval: number,
   options: PollingOptions = {}
 ) => {
-  const{ enabled = true } = options;
+  const { enabled = true, immediate = true } = options;
+  const intervalRef = useRef<number>();
 
   useEffect(() => {
-    if (!enabled) return;
+    let isSubscribed = true;
 
     const poll = async () => {
+      if (!isSubscribed || !enabled) return;
+
       try {
-       await callback();
-       options.onSuccess?.();
+        await callback();
+        options.onSuccess?.();
       } catch (error) {
         options.onError?.(error);
       }
     };
 
     // 초기 실행
-    poll();
+    if (immediate && enabled) {
+      poll();
+    }
 
-    const intervalId = setInterval(poll, interval);
-    return () => clearInterval(intervalId);
-  }, [callback, interval, options.onError, enabled]);
+    // 주기적 실행 설정
+    if (enabled) {
+      intervalRef.current = window.setInterval(poll, interval);
+    }
+
+    // cleanup
+    return () => {
+      isSubscribed = false;
+      if (intervalRef.current) {
+        window.clearInterval(intervalRef.current);
+      }
+    };
+  }, [callback, interval, enabled, immediate]);
 };

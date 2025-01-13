@@ -85,5 +85,24 @@ export const api = {
     a.click();
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
+  },
+
+  // ZIP 다운로드 함수 추가
+  downloadAllResults: async (uploadId: number) => {
+    const response = await fetch(`${API_URL}/analysis/download/${uploadId}`);
+    
+    if (!response.ok) {
+      throw new Error('Failed to download results');
+    }
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `results_${uploadId}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
   }
 }; 

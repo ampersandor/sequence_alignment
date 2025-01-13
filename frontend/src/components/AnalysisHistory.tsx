@@ -24,7 +24,7 @@ import {
   ModalCloseButton,
   ModalBody,
 } from '@chakra-ui/react'
-import { FaDownload, FaSync, FaEye, FaPlay, FaExclamationCircle } from 'react-icons/fa'
+import { FaDownload, FaSync, FaEye, FaPlay, FaExclamationCircle, FaFileArchive } from 'react-icons/fa'
 import { Upload } from '../types/upload'
 import { usePolling } from '../hooks/usePolling'
 import { ResultViewer } from './ResultViewer/ResultViewer'
@@ -41,8 +41,9 @@ export const AnalysisHistory = () => {
   const [errorModalOpen, setErrorModalOpen] = useState(false)
   const [selectedError, setSelectedError] = useState<string | null>(null)
 
-  const fetchUploads = async () => {
+  const fetchUploads = useCallback(async () => {
     try {
+      console.log('fetchUploads 호출');
       const data = await api.getUploads();
       const sortedData = data.sort((a: Upload, b: Upload) => 
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -51,7 +52,7 @@ export const AnalysisHistory = () => {
     } catch (error) {
       handleError(error);
     }
-  };
+  }, []);
 
   const handleError = (error: any) => {
     toast({
@@ -79,45 +80,13 @@ export const AnalysisHistory = () => {
     );
   }, [uploads]);
 
-  useEffect(() => {
-    if (allAnalysesCompleted() && !hasOngoingAnalysis()) {
-      setIsPollingEnabled(false);
-    } else {
-      setIsPollingEnabled(true);
-    }
-  }, [uploads, allAnalysesCompleted, hasOngoingAnalysis]);
-
-  const getPollingInterval = useCallback(() => {
-    const hasStartedAnalysis = uploads.some(upload => 
+  const shouldPoll = useCallback(() => {
+    return uploads.some(upload => 
       upload.analyses?.some(analysis => 
-        analysis.status === 'STARTED'
+        ['PENDING', 'STARTED'].includes(analysis.status)
       )
     );
-    
-    const hasPendingAnalysis = uploads.some(upload => 
-      upload.analyses?.some(analysis => 
-        analysis.status === 'PENDING'
-      )
-    );
-
-    if (hasStartedAnalysis) {
-      return 10000; // 분석 진행 중: 10초
-    } else if (hasPendingAnalysis) {
-      return 15000; // 대기 중: 15초
-    }
-    return 30000; // 기본: 30초
   }, [uploads]);
-
-  usePolling(fetchUploads, getPollingInterval(), {
-    onError: handleError,
-    enabled: isPollingEnabled && (
-      uploads.some(upload => 
-        upload.analyses?.some(analysis => 
-          ['PENDING', 'STARTED'].includes(analysis.status)
-        )
-      )
-    )
-  });
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -132,45 +101,37 @@ export const AnalysisHistory = () => {
       observer.observe(element);
     }
 
-    return () => {
-      observer.disconnect();
-    };
+    return () => observer.disconnect();
   }, []);
 
+  usePolling(fetchUploads, 1000, {
+    enabled: isPollingEnabled && shouldPoll(),
+    immediate: true,
+    onError: handleError
+  });
+
   useEffect(() => {
-    // 초기 데이터 로드
     fetchUploads();
 
-    // 이벤트 리스너 등록
     const handleAnalysisUpdate = () => {
       fetchUploads();
     };
 
     window.addEventListener('analysisUpdated', handleAnalysisUpdate);
-
-    // 컴포넌트 언마운트 시 이벤트 리스너 제거
     return () => {
       window.removeEventListener('analysisUpdated', handleAnalysisUpdate);
     };
-  }, []);
+  }, [fetchUploads]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString('ko-KR')
   }
 
-  const downloadOriginal = async (filename: string) => {
-    try {
-      await api.downloadResult(filename);
-    } catch (error) {
-      handleError(error);
-    }
-  };
-
   const runAnalysis = async (uploadId: number, method: AlignmentMethod) => {
     try {
       await api.startAnalysis(uploadId, method);
       await fetchUploads();
-      setIsPollingEnabled(true);
+      
       toast({
         title: '분석이 시작되었습니다.',
         status: 'info',
@@ -209,6 +170,14 @@ export const AnalysisHistory = () => {
       </ModalContent>
     </Modal>
   );
+
+  const downloadAllResults = async (uploadId: number) => {
+    try {
+      await api.downloadAllResults(uploadId);
+    } catch (error) {
+      handleError(error);
+    }
+  };
 
   return (
     <Card variant="outline" w="full" mt={8} id="analysis-history">
@@ -269,21 +238,24 @@ export const AnalysisHistory = () => {
                         <HStack>
                           <Badge colorScheme="red">실패</Badge>
                           <IconButton
-                            aria-label="Retry MAFFT"
-                            icon={<FaSync />}
-                            size="sm"
+                            aria-label="Show error"
+                            icon={<FaExclamationCircle />}
+                            size="xs"
                             colorScheme="red"
-                            onClick={() => runAnalysis(upload.id, 'mafft')}
+                            onClick={() => {
+                              setSelectedError(upload.analyses?.find(a => a.method === 'mafft')?.error || 'No error details available');
+                              setErrorModalOpen(true);
+                            }}
                           />
                         </HStack>
                       ) : (
                         <Button
-                        leftIcon={<FaPlay />}
-                        size="sm"
-                        onClick={() => runAnalysis(upload.id, 'mafft')}
-                      >
-                        실행
-                      </Button>
+                          leftIcon={<FaPlay />}
+                          size="sm"
+                          onClick={() => runAnalysis(upload.id, 'mafft')}
+                        >
+                          실행
+                        </Button>
                       )}
                     </Td>
                     <Td>
@@ -302,16 +274,17 @@ export const AnalysisHistory = () => {
                             }}
                           />
                         </HStack>
-                      ) : upload.analyses?.find(a => a.method === 'uclust')?.status === 'PENDING' ? (
+                      ) : upload.analyses?.find(a => a.method === 'uclust')?.status === 'PENDING' || 
+                          upload.analyses?.find(a => a.method === 'uclust')?.status === 'STARTED' ? (
                         <HStack>
-                          <Spinner size="sm" />
+                          <Spinner size="sm" color="brand.primary" />
                           <Badge colorScheme="yellow">진행 중</Badge>
                         </HStack>
                       ) : upload.analyses?.find(a => a.method === 'uclust')?.status === 'FAILURE' ? (
                         <HStack>
                           <Badge colorScheme="red">실패</Badge>
                           <IconButton
-                        aria-label="Show error"
+                            aria-label="Show error"
                             icon={<FaExclamationCircle />}
                             size="xs"
                             colorScheme="red"
@@ -332,12 +305,18 @@ export const AnalysisHistory = () => {
                       )}
                     </Td>
                     <Td>
-                      <IconButton
-                        aria-label="Download original"
-                        icon={<FaDownload />}
-                        size="sm"
-                        onClick={() => downloadOriginal(upload.filename)}
-                      />
+                      <HStack spacing={2}>
+                        {upload.analyses?.some(a => a.status === 'SUCCESS') && (
+                          <IconButton
+                            aria-label="Download all results"
+                            icon={<FaFileArchive />}
+                            size="sm"
+                            colorScheme="blue"
+                            onClick={() => downloadAllResults(upload.id)}
+                            title="모든 결과 ZIP 다운로드"
+                          />
+                        )}
+                      </HStack>
                     </Td>
                   </Tr>
                 ))}
