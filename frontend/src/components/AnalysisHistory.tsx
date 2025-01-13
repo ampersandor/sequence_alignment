@@ -87,9 +87,36 @@ export const AnalysisHistory = () => {
     }
   }, [uploads, allAnalysesCompleted, hasOngoingAnalysis]);
 
-  usePolling(fetchUploads, 10000, {
+  const getPollingInterval = useCallback(() => {
+    const hasStartedAnalysis = uploads.some(upload => 
+      upload.analyses?.some(analysis => 
+        analysis.status === 'STARTED'
+      )
+    );
+    
+    const hasPendingAnalysis = uploads.some(upload => 
+      upload.analyses?.some(analysis => 
+        analysis.status === 'PENDING'
+      )
+    );
+
+    if (hasStartedAnalysis) {
+      return 10000; // 분석 진행 중: 10초
+    } else if (hasPendingAnalysis) {
+      return 15000; // 대기 중: 15초
+    }
+    return 30000; // 기본: 30초
+  }, [uploads]);
+
+  usePolling(fetchUploads, getPollingInterval(), {
     onError: handleError,
-    enabled: isPollingEnabled
+    enabled: isPollingEnabled && (
+      uploads.some(upload => 
+        upload.analyses?.some(analysis => 
+          ['PENDING', 'STARTED'].includes(analysis.status)
+        )
+      )
+    )
   });
 
   useEffect(() => {
@@ -142,6 +169,7 @@ export const AnalysisHistory = () => {
   const runAnalysis = async (uploadId: number, method: AlignmentMethod) => {
     try {
       await api.startAnalysis(uploadId, method);
+      await fetchUploads();
       setIsPollingEnabled(true);
       toast({
         title: '분석이 시작되었습니다.',
