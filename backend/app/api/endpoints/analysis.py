@@ -9,6 +9,10 @@ import os
 from app.core.config import settings
 import logging
 from celery import chain
+import zipfile
+from tempfile import NamedTemporaryFile
+from typing import List
+import json
 
 
 router = APIRouter()
@@ -89,3 +93,60 @@ async def get_result_file(file_name: str):
         media_type="application/octet-stream",
         filename=file_name
     ) 
+
+@router.get("/download/{upload_id}")
+async def download_all_results(upload_id: int, db: Session = Depends(get_db)):
+    try:
+        upload = db.query(Upload).filter(Upload.id == upload_id).first()
+        if not upload:
+            raise HTTPException(status_code=404, detail="Upload not found")
+
+        # 결과 파일들의 경로 수집
+        files_to_zip: List[dict] = []
+        for analysis in upload.analyses:
+            if analysis.status == "SUCCESS":
+                # Alignment 결과 파일 추가
+                if analysis.result_file:
+                    files_to_zip.append({
+                        'path': os.path.join('data/results', analysis.result_file),
+                        'name': f'{analysis.method}_alignment_{os.path.basename(analysis.result_file)}'
+                    })
+                
+                # Bluebase 결과 파일들 추가
+                if hasattr(analysis, 'bluebase_result') and analysis.bluebase_result:
+                    # Alignment stats 파일
+                    if analysis.bluebase_result.alignment_stats_file:
+                        files_to_zip.append({
+                            'path': os.path.join('data/results', analysis.bluebase_result.alignment_stats_file),
+                            'name': f'{analysis.method}_bluebase_alignment_stats.txt'
+                        })
+                    # Gap stats 파일
+                    if analysis.bluebase_result.gap_stats_file:
+                        files_to_zip.append({
+                            'path': os.path.join('data/results', analysis.bluebase_result.gap_stats_file),
+                            'name': f'{analysis.method}_bluebase_gap_stats.txt'
+                        })
+        
+        if not files_to_zip:
+            raise HTTPException(status_code=404, detail="No results available")
+
+        # 임시 ZIP 파일 생성
+        with NamedTemporaryFile(delete=False, suffix='.zip') as tmp_zip:
+            with zipfile.ZipFile(tmp_zip.name, 'w') as zip_file:
+                # 결과 파일들을 ZIP에 추가
+                for file_info in files_to_zip:
+                    if os.path.exists(file_info['path']):
+                        zip_file.write(
+                            file_info['path'], 
+                            file_info['name']
+                        )
+
+            return FileResponse(
+                tmp_zip.name,
+                media_type='application/zip',
+                filename=f'results_{upload_id}.zip'
+            )
+
+    except Exception as e:
+        logger.error(f"Error creating ZIP file: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e)) 
