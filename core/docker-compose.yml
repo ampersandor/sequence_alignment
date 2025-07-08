@@ -1,21 +1,21 @@
 version: "3.8"
 
 services:
-  rabbitmq:
-    image: rabbitmq:3-management
-    ports:
-      - "5672:5672"     # AMQP
-      - "15672:15672"   # RabbitMQ Web UI
-    environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    volumes:
-      - ./rabbitmq-config:/etc/rabbitmq/conf.d
+  # rabbitmq:
+  #   image: rabbitmq:3-management
+  #   ports:
+  #     - "5672:5672"     # AMQP
+  #     - "15672:15672"   # RabbitMQ Web UI
+  #   environment:
+  #     RABBITMQ_DEFAULT_USER: guest
+  #     RABBITMQ_DEFAULT_PASS: guest
+  #   healthcheck:
+  #     test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+  #     interval: 5s
+  #     timeout: 3s
+  #     retries: 5
+  #   volumes:
+  #     - ./rabbitmq-config:/etc/rabbitmq/conf.d
   
   redis:
     image: redis:7
@@ -33,17 +33,22 @@ services:
       dockerfile: Dockerfile
     user: "1000:1000"  # Run as non-root user
     depends_on:
-      rabbitmq:
-        condition: service_healthy
+      # rabbitmq:
+      #   condition: service_healthy
       redis:
         condition: service_healthy
     environment:
-      - BROKER_URL=pyamqp://guest:guest@rabbitmq//
+      # - BROKER_URL=pyamqp://guest:guest@rabbitmq//
+      # - REDIS_HOST=redis
+      - BROKER_URL=amqps://lpadzyog:cm0EAwpUg_1X4rC1BLewg-chs1YnT_FV@dingo.rmq.cloudamqp.com/lpadzyog
       - REDIS_HOST=redis
-      - WEBHOOK_URL=http://api:8000/webhook/status
+      - DATA_DIR=/data
+      - WEBHOOK_URL=http://host.docker.internal:8080/align/webhook
     volumes:
-      - ./data:/data  # 입력/출력용 파일 공유
+      - ../data:/data  # 입력/출력용 파일 공유
       - ./tasks:/app/tasks
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
         
   api:
     build:
@@ -52,12 +57,16 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      rabbitmq:
-        condition: service_healthy
+      # rabbitmq:
+      #   condition: service_healthy
       redis:
         condition: service_healthy
     environment:
-      - BROKER_URL=pyamqp://guest:guest@rabbitmq//
+      - BROKER_URL=amqps://lpadzyog:cm0EAwpUg_1X4rC1BLewg-chs1YnT_FV@dingo.rmq.cloudamqp.com/lpadzyog
       - REDIS_HOST=redis
     volumes:
       - ./tasks:/app/tasks
+
+networks:
+  default:
+    driver: bridge

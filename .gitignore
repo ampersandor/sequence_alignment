@@ -1,2 +1,7 @@
+cursor-talk-to-figma-mcp/
 .venv/
+.vscode/
 *.pyc
+.DS_Store
+.cursor/
+data/
