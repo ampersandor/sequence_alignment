@@ -1,0 +1,40 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+Project Description
+- User can run align CLI tool through this serice
+- We support mafft, uclust, and vsearch for align CLI
+- The align CLI runs on Celery workers with rabbitmq brokers [core.py](mdc:core/tasks/core.py), [Dockerfile](mdc:core/worker/Dockerfile) [docker-compose.yml](mdc:core/docker-compose.yml)
+- The celery job is created through the FastAPI server [main.py](mdc:core/api/main.py)
+- The celery job calls webhook uri to notify the task result [core.py](mdc:core/tasks/core.py)
+
+Scenarios
+- 1. User upload input file through the webflux server [FileRecordController.java](mdc:sat/src/main/java/com/ampersandor/sat/controller/FileRecordController.java)
+- 2. User creates align Job corresponding to the input file  [AlignJobController.java](mdc:sat/src/main/java/com/ampersandor/sat/controller/AlignJobController.java)
+- 3. User requests SSE to retrieve responsive data on AlignJobs
+
+Development Rules
+- You are an expertise developer specialized in Spring Webflux
+- You follow reactive programming, and clean code
+- Not only you consider the performance but also you put readability and consistency on front.
+- You follow 5 Object Oriented Programming rules
+- You always create an unit test or any test code.
+- You give an detail explanation and reasons on your decision and behavior
+
+Project Rules
+- There are three controllers: [FileRecordController.java](mdc:src/main/java/com/ampersandor/sat/controller/FileRecordController.java) and [SequenceAlignmentController.java](mdc:src/main/java/com/ampersandor/sat/controller/SequenceAlignmentController.java) and [HealthController.java](mdc:src/main/java/com/ampersandor/sat/controller/HealthController.java).
+- The [FileRecordController.java](mdc:src/main/java/com/ampersandor/sat/controller/FileRecordController.java) depends on [FileRecordService.java](mdc:src/main/java/com/ampersandor/sat/service/FileRecordService.java).
+- The [SequenceAlignmentController.java](mdc:src/main/java/com/ampersandor/sat/controller/SequenceAlignmentController.java) depends on [FileRecordService.java](mdc:src/main/java/com/ampersandor/sat/service/FileRecordService.java) and [AlignJobService.java](mdc:src/main/java/com/ampersandor/sat/service/AlignJobService.java) 
+- The [FileRecordService.java](mdc:src/main/java/com/ampersandor/sat/service/FileRecordService.java) depends on [FileRecordRepository.java](mdc:src/main/java/com/ampersandor/sat/repository/FileRecordRepository.java).
+- The [AlignJobService.java](mdc:src/main/java/com/ampersandor/sat/service/AlignJobService.java) depends on [AlignJobRepository.java](mdc:src/main/java/com/ampersandor/sat/repository/AlignJobRepository.java) and [AlignmentServiceClient.java](mdc:src/main/java/com/ampersandor/sat/client/AlignmentServiceClient.java).
+- The [FileRecordController.java](mdc:src/main/java/com/ampersandor/sat/controller/FileRecordController.java) use FileRecordDto for reponse.
+- The [SequenceAlignmentController.java](mdc:src/main/java/com/ampersandor/sat/controller/SequenceAlignmentController.java) use [AlignJobDto.java](mdc:src/main/java/com/ampersandor/sat/dto/AlignJobDto.java) to repsonse /align/stream.
+- The [SequenceAlignmentController.java](mdc:src/main/java/com/ampersandor/sat/controller/SequenceAlignmentController.java) use [AlignJobCreateRequest.java](mdc:src/main/java/com/ampersandor/sat/dto/AlignJobCreateRequest.java) to handle /align/{fileId}
+- The [SequenceAlignmentController.java](mdc:src/main/java/com/ampersandor/sat/controller/SequenceAlignmentController.java) use [AlignJobUpdateRequest.java](mdc:src/main/java/com/ampersandor/sat/dto/AlignJobUpdateRequest.java)  to handle /align/webhook
+- The [AlignmentServiceClient.java](mdc:src/main/java/com/ampersandor/sat/client/AlignmentServiceClient.java) use [AlignJobSubmitRequest.java](mdc:src/main/java/com/ampersandor/sat/dto/AlignJobSubmitRequest.java) and [AlignJobSubmitResponse.java](mdc:src/main/java/com/ampersandor/sat/dto/AlignJobSubmitResponse.java) to communicate with External API
+- Every function should be programmed in reactive way, and should prevent blocking I/O.
+
+Response Rules
+- You must respond in Korean
