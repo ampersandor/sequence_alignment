@@ -1,0 +1,746 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+Rule Name: frontend-api-spec
+Description:
+
+API Documentation for Sequence Alignment Tool (SAT)
+# Sequence Alignment Tool (SAT) API 명세서
+
+## 개요
+이 API는 시퀀스 정렬 도구를 위한 RESTful API입니다. 파일 업로드, 정렬 작업 생성, 실시간 상태 모니터링 등의 기능을 제공합니다.
+
+**Base URL**: `http://localhost:8080`
+
+## 인증
+현재 버전에서는 별도의 인증이 필요하지 않습니다.
+
+---
+
+## 1. 파일 관리 API
+
+### 1.1 파일 업로드
+파일을 서버에 업로드합니다.
+
+**Request**
+```
+POST /file/upload
+Content-Type: multipart/form-data
+```
+
+**Parameters**
+- `file`: 업로드할 파일 (form-data)
+
+**Response**
+```json
+{
+  "fileId": "string",
+  "fileName": "string", 
+  "size": number
+}
+```
+
+**Example**
+```bash
+curl -X POST "http://localhost:8080/file/upload" \
+  -F "file=@example.fasta"
+```
+
+### 1.2 입력 파일 목록 조회
+업로드된 입력 파일 목록을 조회합니다.
+
+**Request**
+```
+GET /file/list
+```
+
+**Response**
+```json
+[
+  {
+    "id": number,
+    "filename": "string",
+    "uniqueFilename": "string",
+    "createdAt": "2024-01-01T00:00:00",
+    "fileType": "INPUT",
+    "size": number
+  }
+]
+```
+
+### 1.3 출력 파일 목록 조회
+정렬 작업의 결과 파일 목록을 조회합니다.
+
+**Request**
+```
+GET /file/list/output
+```
+
+**Response**
+```json
+[
+  {
+    "id": number,
+    "filename": "string", 
+    "uniqueFilename": "string",
+    "createdAt": "2024-01-01T00:00:00",
+    "fileType": "OUTPUT",
+    "size": number
+  }
+]
+```
+
+### 1.4 전체 파일 목록 조회
+모든 파일 목록을 조회합니다.
+
+**Request**
+```
+GET /file/list/all
+```
+
+**Response**
+```json
+[
+  {
+    "id": number,
+    "filename": "string",
+    "uniqueFilename": "string", 
+    "createdAt": "2024-01-01T00:00:00",
+    "fileType": "INPUT|OUTPUT",
+    "size": number
+  }
+]
+```
+
+### 1.5 파일 타입별 목록 조회
+특정 파일 타입의 파일 목록을 조회합니다.
+
+**Request**
+```
+GET /file/list/{fileType}
+```
+
+**Path Parameters**
+- `fileType`: 파일 타입 (INPUT, OUTPUT)
+
+**Response**
+```json
+[
+  {
+    "id": number,
+    "filename": "string",
+    "uniqueFilename": "string",
+    "createdAt": "2024-01-01T00:00:00", 
+    "fileType": "INPUT|OUTPUT",
+    "size": number
+  }
+]
+```
+
+### 1.6 파일 다운로드
+파일을 다운로드합니다.
+
+**Request**
+```
+GET /file/download/{fileId}
+```
+
+**Path Parameters**
+- `fileId`: 다운로드할 파일의 ID
+
+**Response**
+- Content-Type: application/octet-stream
+- Content-Disposition: attachment; filename="원본파일명"
+- 파일 스트림 데이터
+
+---
+
+## 2. 정렬 작업 API
+
+### 2.1 정렬 작업 시작
+기존 파일에 대한 정렬 작업을 시작합니다.
+
+**Request**
+```
+POST /align/{fileId}
+Content-Type: application/json
+```
+
+**Path Parameters**
+- `fileId`: 정렬할 파일의 ID
+
+**Request Body**
+```json
+{
+  "user_id": number,
+  "align_tool": "mafft|uclust|vsearch",
+  "options": "string"
+}
+```
+
+**Response**
+```json
+{
+  "taskId": "string",
+  "userID": number,
+  "inputPath": "string",
+  "inputFileRecordId": number,
+  "alignTool": "mafft|uclust|vsearch",
+  "options": "string",
+  "createdAt": "2024-01-01T00:00:00",
+  "updatedAt": "2024-01-01T00:00:00",
+  "outputFileRecordId": number,
+  "status": "PENDING|RUNNING|SUCCESS|ERROR",
+  "message": "string"
+}
+```
+
+**Example**
+```bash
+curl -X POST "http://localhost:8080/align/123" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": 1,
+    "align_tool": "mafft",
+    "options": "--auto"
+  }'
+```
+
+### 2.2 정렬 작업 목록 조회 (페이징 및 정렬 지원)
+기존 정렬 작업 목록을 페이징 정보와 함께 조회합니다. 선택적으로 정렬 기능을 사용할 수 있습니다.
+
+**Request**
+```
+GET /align/jobs?page={page}&size={size}&sortBy={sortBy}&sortDirection={sortDirection}
+```
+
+**Query Parameters**
+- `page`: 페이지 번호 (기본값: 1)
+- `size`: 페이지 크기 (기본값: 10)
+- `sortBy`: 정렬할 필드명 (선택사항)
+  - `createdAt`: 생성일시
+  - `updatedAt`: 수정일시
+  - `status`: 작업 상태
+  - `alignTool`: 정렬 도구
+  - `taskId`: 작업 ID
+  - `userId`: 사용자 ID
+- `sortDirection`: 정렬 방향 (기본값: ASC)
+  - `ASC`: 오름차순
+  - `DESC`: 내림차순
+
+**Response**
+```json
+{
+  "content": [
+    {
+      "taskId": "string",
+      "userID": number,
+      "inputPath": "string",
+      "inputFileRecordId": number,
+      "alignTool": "mafft|uclust|vsearch",
+      "options": "string",
+      "createdAt": "2024-01-01T00:00:00",
+      "updatedAt": "2024-01-01T00:00:00",
+      "outputFileRecordId": number,
+      "status": "PENDING|RUNNING|SUCCESS|ERROR",
+      "message": "string"
+    }
+  ],
+  "page": 1,
+  "size": 10,
+  "totalPages": 5,
+  "totalElements": 50,
+  "first": true,
+  "last": false,
+  "numberOfElements": 10
+}
+```
+
+**Examples**
+```bash
+# 기본 페이징 (정렬 없음)
+curl -X GET "http://localhost:8080/align/jobs?page=1&size=10"
+
+# 생성일시 내림차순 정렬
+curl -X GET "http://localhost:8080/align/jobs?page=1&size=10&sortBy=createdAt&sortDirection=DESC"
+
+# 상태별 오름차순 정렬
+curl -X GET "http://localhost:8080/align/jobs?page=1&size=10&sortBy=status&sortDirection=ASC"
+
+# 정렬 도구별 정렬 (기본 ASC)
+curl -X GET "http://localhost:8080/align/jobs?page=1&size=10&sortBy=alignTool"
+```
+
+### 2.3 실시간 작업 상태 스트리밍 (SSE)
+Server-Sent Events를 통해 정렬 작업 상태를 실시간으로 수신합니다.
+
+**Request**
+```
+GET /align/stream?page={page}&size={size}
+Accept: text/event-stream
+```
+
+**Query Parameters**
+- `page`: 페이지 번호 (기본값: 1)
+- `size`: 페이지 크기 (기본값: 10)
+
+**Response**
+```
+Content-Type: text/event-stream
+
+data: {"taskId":"task123","userID":1,"status":"RUNNING",...}
+
+data: {"taskId":"task456","userID":2,"status":"SUCCESS",...}
+```
+
+**JavaScript 예제**
+```javascript
+const eventSource = new EventSource('http://localhost:8080/align/stream');
+
+eventSource.onmessage = function(event) {
+  const job = JSON.parse(event.data);
+  console.log('작업 상태 업데이트:', job);
+};
+
+eventSource.onerror = function(error) {
+  console.error('SSE 연결 오류:', error);
+};
+```
+
+### 2.4 Webhook 엔드포인트 (내부 사용)
+Celery worker가 작업 결과를 알려주는 webhook 엔드포인트입니다.
+
+**Request**
+```
+POST /align/webhook
+Content-Type: application/json
+```
+
+**Request Body**
+```json
+{
+  "task_id": "string",
+  "status": "PENDING|RUNNING|SUCCESS|ERROR",
+  "output_file": "string",
+  "error": "string"
+}
+```
+
+**Response**
+```json
+{
+  "taskId": "string",
+  "userID": number,
+  "inputPath": "string",
+  "inputFileRecordId": number,
+  "alignTool": "mafft|uclust|vsearch",
+  "options": "string",
+  "createdAt": "2024-01-01T00:00:00",
+  "updatedAt": "2024-01-01T00:00:00",
+  "outputFileRecordId": number,
+  "status": "PENDING|RUNNING|SUCCESS|ERROR",
+  "message": "string"
+}
+```
+
+### 2.5 정렬 서비스 헬스 체크
+정렬 워크플로우 서비스의 상태를 확인합니다.
+
+**Request**
+```
+GET /align/health
+```
+
+**Response**
+```json
+"Sequence Alignment Workflow Service is running"
+```
+
+---
+
+## 3. 헬스 체크 API
+
+### 3.1 기본 헬스 체크
+애플리케이션의 기본 상태를 확인합니다.
+
+**Request**
+```
+GET /health
+```
+
+**Response**
+```json
+{
+  "status": "UP",
+  "timestamp": "2024-01-01T00:00:00",
+  "details": "SAT Application is running normally"
+}
+```
+
+### 3.2 상세 헬스 체크
+애플리케이션의 상세 상태를 확인합니다.
+
+**Request**
+```
+GET /health/detailed
+```
+
+**Response**
+```json
+{
+  "status": "UP",
+  "timestamp": "2024-01-01T00:00:00",
+  "details": "Database: Connected, Memory: 256.50 MB used, Uptime: Available"
+}
+```
+
+---
+
+## 4. 데이터 타입 정의
+
+### 4.1 AlignTool (정렬 도구)
+```
+mafft    - MAFFT 정렬 도구
+uclust   - UCLUST 정렬 도구  
+vsearch  - VSEARCH 정렬 도구
+```
+
+### 4.2 AlignJobStatus (작업 상태)
+```
+PENDING  - 대기 중
+RUNNING  - 실행 중
+SUCCESS  - 성공 완료
+ERROR    - 오류 발생
+```
+
+### 4.3 FileType (파일 타입)
+```
+INPUT    - 입력 파일
+OUTPUT   - 출력 파일
+```
+
+### 4.4 정렬 가능한 필드
+```
+createdAt  - 생성일시 (기본값)
+updatedAt  - 수정일시
+status     - 작업 상태
+alignTool  - 정렬 도구
+taskId     - 작업 ID
+userId     - 사용자 ID
+```
+
+### 4.5 정렬 방향
+```
+ASC      - 오름차순 (기본값)
+DESC     - 내림차순
+```
+
+---
+
+## 5. 오류 응답
+
+### 5.1 공통 오류 응답
+```json
+{
+  "error": "string",
+  "message": "string",
+  "timestamp": "2024-01-01T00:00:00"
+}
+```
+
+### 5.2 HTTP 상태 코드
+- `200`: 성공
+- `400`: 잘못된 요청
+- `404`: 리소스를 찾을 수 없음
+- `500`: 서버 내부 오류
+
+---
+
+## 6. 사용 시나리오
+
+### 6.1 전체 워크플로우
+1. **파일 업로드**: `POST /file/upload`
+2. **정렬 작업 시작**: `POST /align/{fileId}`
+3. **실시간 상태 모니터링**: `GET /align/stream` (SSE)
+4. **완료된 작업 확인**: `GET /align/jobs` (페이징 정보 포함)
+5. **결과 파일 다운로드**: `GET /file/download/{fileId}`
+
+### 6.2 React 예제 코드
+```javascript
+// 1. 파일 업로드
+const uploadFile = async (file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  const response = await fetch('/file/upload', {
+    method: 'POST',
+    body: formData
+  });
+  
+  return response.json();
+};
+
+// 2. 정렬 작업 시작
+const startAlignment = async (fileId, alignTool, options) => {
+  const response = await fetch(`/align/${fileId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      user_id: 1,
+      align_tool: alignTool,
+      options: options
+    })
+  });
+  
+  return response.json();
+};
+
+// 3. 페이징 정보 포함 작업 목록 조회 (정렬 지원)
+const getJobsWithPaging = async (page = 1, size = 10, sortBy = null, sortDirection = 'ASC') => {
+  let url = `/align/jobs?page=${page}&size=${size}`;
+  
+  if (sortBy) {
+    url += `&sortBy=${sortBy}&sortDirection=${sortDirection}`;
+  }
+  
+  const response = await fetch(url);
+  return response.json();
+};
+
+// 정렬 옵션을 포함한 작업 조회 예제
+const getJobsSortedByCreatedDate = async (page = 1, size = 10) => {
+  return getJobsWithPaging(page, size, 'createdAt', 'DESC');
+};
+
+const getJobsSortedByStatus = async (page = 1, size = 10) => {
+  return getJobsWithPaging(page, size, 'status', 'ASC');
+};
+
+// 4. 실시간 상태 모니터링
+const monitorJobs = () => {
+  const eventSource = new EventSource('/align/stream');
+  
+  eventSource.onmessage = (event) => {
+    const job = JSON.parse(event.data);
+    if (job.taskId !== 'KEEP_ALIVE') {
+      updateJobStatus(job);
+    }
+  };
+  
+  return eventSource;
+};
+
+// 5. 페이징 컴포넌트 예제
+const JobsPagination = ({ currentPage, totalPages, onPageChange }) => {
+  const handlePrevious = () => {
+    if (currentPage > 1) {
+      onPageChange(currentPage - 1);
+    }
+  };
+  
+  const handleNext = () => {
+    if (currentPage < totalPages) {
+      onPageChange(currentPage + 1);
+    }
+  };
+  
+  return (
+    <div>
+      <button onClick={handlePrevious} disabled={currentPage === 1}>
+        이전
+      </button>
+      <span>{currentPage} / {totalPages}</span>
+      <button onClick={handleNext} disabled={currentPage === totalPages}>
+        다음
+      </button>
+    </div>
+  );
+};
+
+// 6. 정렬 컴포넌트 예제
+const JobsSort = ({ sortBy, sortDirection, onSortChange }) => {
+  const sortOptions = [
+    { value: 'createdAt', label: '생성일시' },
+    { value: 'updatedAt', label: '수정일시' },
+    { value: 'status', label: '상태' },
+    { value: 'alignTool', label: '정렬 도구' },
+    { value: 'taskId', label: '작업 ID' }
+  ];
+  
+  const handleSortChange = (field) => {
+    const newDirection = sortBy === field && sortDirection === 'ASC' ? 'DESC' : 'ASC';
+    onSortChange(field, newDirection);
+  };
+  
+  return (
+    <div>
+      {sortOptions.map(option => (
+        <button
+          key={option.value}
+          onClick={() => handleSortChange(option.value)}
+          className={sortBy === option.value ? 'active' : ''}
+        >
+          {option.label}
+          {sortBy === option.value && (
+            <span>{sortDirection === 'ASC' ? ' ↑' : ' ↓'}</span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+};
+
+// 7. 통합 작업 목록 컴포넌트 예제
+const JobsList = () => {
+  const [jobs, setJobs] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [sortBy, setSortBy] = useState('createdAt');
+  const [sortDirection, setSortDirection] = useState('DESC');
+  const [loading, setLoading] = useState(false);
+  
+  const loadJobs = async () => {
+    setLoading(true);
+    try {
+      const response = await getJobsWithPaging(currentPage, 10, sortBy, sortDirection);
+      setJobs(response.content);
+      setTotalPages(response.totalPages);
+    } catch (error) {
+      console.error('작업 목록 로드 실패:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  useEffect(() => {
+    loadJobs();
+  }, [currentPage, sortBy, sortDirection]);
+  
+  const handleSortChange = (field, direction) => {
+    setSortBy(field);
+    setSortDirection(direction);
+    setCurrentPage(1); // 정렬 변경 시 첫 페이지로 이동
+  };
+  
+  return (
+    <div>
+      <JobsSort 
+        sortBy={sortBy} 
+        sortDirection={sortDirection} 
+        onSortChange={handleSortChange} 
+      />
+      
+      {loading ? (
+        <div>로딩 중...</div>
+      ) : (
+        <div>
+          {jobs.map(job => (
+            <div key={job.taskId}>
+              {job.taskId} - {job.status} ({job.alignTool})
+            </div>
+          ))}
+        </div>
+      )}
+      
+      <JobsPagination 
+        currentPage={currentPage} 
+        totalPages={totalPages} 
+        onPageChange={setCurrentPage} 
+      />
+    </div>
+  );
+};
+```
+
+---
+
+## 7. 참고 사항
+
+### 7.1 SSE 연결
+- SSE 연결은 15초마다 Keep-Alive 신호를 전송합니다
+- 연결이 끊어지면 자동으로 재연결을 시도하세요
+
+### 7.2 파일 업로드 제한
+- 지원되는 파일 형식: FASTA 형식 권장
+- 파일 크기 제한: 서버 설정에 따라 다름
+
+### 7.3 비동기 처리
+- 모든 정렬 작업은 비동기로 처리됩니다
+- 작업 완료 여부는 SSE 또는 폴링을 통해 확인하세요
+
+### 7.4 페이징 및 정렬 API 사용 권장사항
+- 페이징 정보를 통해 효율적인 UI/UX를 구현할 수 있습니다
+- 총 페이지 수와 전체 데이터 수를 활용하여 사용자 경험을 향상시키세요
+- 정렬 기능을 활용하여 사용자가 원하는 순서로 데이터를 조회할 수 있습니다
+- 기본 정렬은 `createdAt` 필드로 수행되며, 잘못된 정렬 필드 입력 시 자동으로 기본값이 적용됩니다
+- 정렬 변경 시 페이지를 1로 리셋하는 것을 권장합니다
+
+---
+
+## 8. 개발 환경 설정
+
+### 8.1 CORS 설정
+프론트엔드 개발 시 CORS 이슈가 발생할 수 있습니다. 개발용 프록시 설정을 권장합니다.
+
+### 8.2 환경 변수
+```bash
+# 개발 환경
+REACT_APP_API_URL=http://localhost:8080
+
+# 운영 환경
+REACT_APP_API_URL=https://your-production-domain.com
+```
+
+### 8.3 TypeScript 타입 정의
+```typescript
+interface AlignJobDto {
+  taskId: string;
+  userID: number;
+  inputPath: string;
+  inputFileRecordId: number;
+  alignTool: 'mafft' | 'uclust' | 'vsearch';
+  options: string;
+  createdAt: string;
+  updatedAt: string;
+  outputFileRecordId: number;
+  status: 'PENDING' | 'RUNNING' | 'SUCCESS' | 'ERROR';
+  message: string;
+}
+
+interface FileRecordDto {
+  id: number;
+  filename: string;
+  uniqueFilename: string;
+  createdAt: string;
+  fileType: 'INPUT' | 'OUTPUT';
+  size: number;
+}
+
+interface PagedResponse<T> {
+  content: T[];
+  page: number;
+  size: number;
+  totalPages: number;
+  totalElements: number;
+  first: boolean;
+  last: boolean;
+  numberOfElements: number;
+}
+
+// 페이징된 작업 목록 응답 타입
+type PagedJobsResponse = PagedResponse<AlignJobDto>;
+```
+
+
+
+
+
+Development Rules
+---------------
+1. All API requests should be made using reactive programming patterns
+2. Implement proper error handling and loading states
+3. Use appropriate content types for requests
+4. Handle SSE reconnection automatically
+5. Validate file types and sizes on the frontend before upload
